@@ -2,9 +2,9 @@ package com.stoufexis.swim
 
 import zio.*
 
-import java.net.InetSocketAddress
-import java.nio.ByteBuffer
-import java.nio.channels.DatagramChannel
+// import java.net.InetSocketAddress
+// import java.nio.ByteBuffer
+// import java.nio.channels.DatagramChannel
 
 trait Comms:
   /** Gets currently available messages from the input buffer. Returns immediatelly if there are none.
