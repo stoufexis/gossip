@@ -3,20 +3,21 @@ package com.stoufexis.swim
 import zio.*
 import zio.stream.*
 
-import java.time.LocalDateTime
+import com.stoufexis.swim.types.*
 
 object Swim:
-  import Message.*, Update.*
+  import Message.*
+  import Update.*
 
   case class State(
-    waitingOnAck: Option[Address],
-    periodStart:  LocalDateTime,
-    members:      Vector[Address],
-    updates:      Vector[Update]
+    waitingOnAck:    Option[Address],
+    members:         Vector[Address],
+    updates:         Vector[Update],
+    aggregatedTicks: Ticks
   )
 
   object State:
-    def empty(periodStart: LocalDateTime): State = ???
+    def empty: State = ???
 
   def apply(comms: Comms, cfg: SwimConfig) =
     def sendPing(st: State): Task[Address] =
@@ -42,12 +43,6 @@ object Swim:
           ZIO.foreach(indirectTargets): via =>
             comms.send(via, Ping(pinger = cfg.address, acker = target))
       yield ()
-
-    def periodExpired(lastPeriodStart: LocalDateTime, time: LocalDateTime): Boolean =
-      time.isAfter(lastPeriodStart.plus(cfg.pingPeriod))
-
-    def timeoutExpired(lastPeriodStart: LocalDateTime, time: LocalDateTime): Boolean =
-      time.isAfter(lastPeriodStart.plus(cfg.timeoutPeriod))
 
     def handleMessages(waitingOn: Option[Address]): Task[Option[Address]] =
       def loop(remainder: Chunk[Message], acc: Option[Address]): Task[Option[Address]] =
@@ -82,46 +77,40 @@ object Swim:
 
       comms.receive.flatMap(loop(_, waitingOn))
 
-    def process(st: State, time: LocalDateTime): Task[State] = st match
-      case State(None, lastPeriodStart, members, updates) if periodExpired(lastPeriodStart, time) =>
+    def process(st: State, ticks: Ticks): Task[State] = st match
+      case State(None, members, updates, aggTick) if aggTick + ticks > cfg.pingPeriodTicks =>
         for
           waitingOnAck <- sendPing(st)
           waitingOnAck <- handleMessages(Some(waitingOnAck))
-        yield State(waitingOnAck, time, members, updates)
+        yield State(waitingOnAck, members, updates, Ticks.zero)
 
-      case State(Some(waitingOnAck), periodStart, members, updates) if periodExpired(periodStart, time) =>
+      case State(Some(waitingOnAck), members, updates, aggTick) if aggTick + ticks > cfg.pingPeriodTicks =>
         for
           _               <- ZIO.logWarning(s"Ping period expired while waiting for $waitingOnAck")
           newWaitingOnAck <- sendPing(st)
           newWaitingOnAck <- handleMessages(Some(newWaitingOnAck))
         yield State(
           newWaitingOnAck,
-          time,
           // TODO: removing from members list should have constant complexity!
           members.filterNot(_ == waitingOnAck),
-          Failed(waitingOnAck) +: updates
+          Failed(waitingOnAck) +: updates,
+          Ticks.zero
         )
 
-      case State(Some(waitingOnAck), periodStart, members, updates) if timeoutExpired(periodStart, time) =>
+      case State(Some(waitingOnAck), members, updates, aggTick) if aggTick + ticks > cfg.timeoutPeriodTicks =>
         for
           _            <- ZIO.logWarning(s"Direct ping period expired while waiting for $waitingOnAck")
           _            <- sendIndirectPing(st, waitingOnAck)
           waitingOnAck <- handleMessages(Some(waitingOnAck))
-        yield State(waitingOnAck, periodStart, members, updates)
+        yield State(waitingOnAck, members, updates, aggTick + ticks)
 
-      case State(waitingOnAck, periodStart, members, updates) =>
+      case State(waitingOnAck, members, updates, aggTick) =>
         for
           waitingOnAck <- handleMessages(waitingOnAck)
-        yield State(waitingOnAck, periodStart, members, updates)
+        yield State(waitingOnAck, members, updates, aggTick + ticks)
 
-    val ticker: ZStream[Any, Nothing, LocalDateTime] =
-      ZStream
-        .tick(cfg.tickSpeed)
-        .mapZIO(_ => ZIO.clockWith(_.localDateTime))
-        
-    ticker
-      .take(1)
-      .mapZIO(t => ticker.drop(1).runFoldZIO(State.empty(t))(process(_, _)))
-      .runDrain *> ZIO.never
+    ZStream
+      .fromSchedule(Ticks.schedule(cfg.tickSpeed.toMillis))
+      .runFoldZIO(State.empty)(process(_, _)) *> ZIO.never
 
   end apply

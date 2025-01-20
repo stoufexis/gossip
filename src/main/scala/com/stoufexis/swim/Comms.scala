@@ -2,11 +2,17 @@ package com.stoufexis.swim
 
 import zio.*
 
+import java.net.InetSocketAddress
+import java.nio.ByteBuffer
+import java.nio.channels.DatagramChannel
+
 trait Comms:
-  /** Gets currently available messages from the input buffer
+  /** Gets currently available messages from the input buffer. Returns immediatelly if there are none.
     */
   def receive: Task[Chunk[Message]]
 
+  /** Backpressures if there is no room to output.
+    */
   def send(to: Address, message: Message): Task[Unit]
 
 // object Comms:
@@ -23,7 +29,7 @@ trait Comms:
 //           ZIO.succeedBlocking(ch.close())
 
 //       _ <-
-//         ZIO.attemptBlocking(ch.bind(inet(cfg.bindAddress))) // TODO: This might not be blocking
+//         ZIO.attemptBlocking(ch.bind(inet(cfg.address))) // TODO: This might not be blocking
 //     yield new:
 //       def receive: Task[(Address, Chunk[Byte])] =
 //         val buf  = ByteBuffer.allocate(cfg.receiveBufferSize)
