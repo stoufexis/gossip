@@ -10,7 +10,7 @@ object Swim:
 
   case class State(
     waitingOnAck:    Option[Address],
-    members:         Set[Address],
+    members:         Members,
     updates:         Updates,
     aggregatedTicks: Ticks
   )
@@ -18,7 +18,7 @@ object Swim:
   def apply(comms: Comms, cfg: SwimConfig) =
     def sendPing(st: State): Task[Address] =
       val membersArr: IndexedSeq[Address] =
-        (st.members - cfg.address).toArray
+        st.members.othersIndexed
 
       for
         index: Int <-
@@ -36,7 +36,7 @@ object Swim:
 
     def sendIndirectPing(st: State, target: Address): Task[Unit] =
       val membersArr: IndexedSeq[Address] =
-        (st.members - cfg.address - target).toArray
+        st.members.othersIndexedWithout(target)
 
       for
         shuffledWithoutTarget: IndexedSeq[Address] <-
@@ -115,7 +115,7 @@ object Swim:
     val initState: State =
       State(
         waitingOnAck    = None,
-        members         = Set(cfg.address),
+        members         = Members.current(cfg.address),
         updates         = Updates.joined(cfg.address),
         aggregatedTicks = Ticks.zero
       )
