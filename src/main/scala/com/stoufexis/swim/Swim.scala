@@ -5,16 +5,13 @@ import zio.stream.*
 
 import com.stoufexis.swim.types.*
 
-import scala.collection.immutable.Queue as PureQueue // aliased so it is not confused with zio.Queue or cats.effect.std.Queue
-
 object Swim:
   import Message.*
-  import Update.*
 
   case class State(
     waitingOnAck:    Option[Address],
     members:         Set[Address],
-    updates:         PureQueue[Update],
+    updates:         Updates,
     aggregatedTicks: Ticks
   )
 
@@ -72,7 +69,7 @@ object Swim:
             val newAcc: State =
               if acc.members.contains(pinger)
               then acc
-              else acc.copy(members = acc.members + pinger, updates = acc.updates.enqueue(Joined(pinger)))
+              else acc.copy(members = acc.members + pinger, updates = acc.updates.joined(pinger))
 
             ZIO.logInfo(s"Acking ping from $pinger")
               *> comms.send(pinger, Ack(pinger = pinger, acker = acker))
@@ -110,7 +107,7 @@ object Swim:
         yield State(
           Some(newWaitingOnAck),
           members - waitingOnAck,
-          updates.enqueue(Failed(waitingOnAck)),
+          updates.failed(waitingOnAck),
           Ticks.zero
         )
 

@@ -1,4 +1,4 @@
-package com.stoufexis.swim
+package com.stoufexis.swim.types
 
 enum Message:
   case Ping(pinger: Address, acker: Address)

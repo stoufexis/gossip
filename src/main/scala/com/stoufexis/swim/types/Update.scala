@@ -1,4 +1,4 @@
-package com.stoufexis.swim
+package com.stoufexis.swim.types
 
 enum Update:
   case Failed(member: Address)

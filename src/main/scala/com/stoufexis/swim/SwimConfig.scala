@@ -1,6 +1,7 @@
 package com.stoufexis.swim
 
 import zio.Duration
+import types.Address
 
 /** @param address
   * @param receiveBufferSize
