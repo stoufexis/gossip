@@ -15,13 +15,10 @@ object Swim:
     aggregatedTicks: Ticks
   )
 
-  object State:
-    def empty: State = ???
-
   def apply(comms: Comms, cfg: SwimConfig) =
     def sendPing(st: State): Task[Address] =
       val membersArr: IndexedSeq[Address] =
-        st.members.toArray
+        (st.members - cfg.address).toArray
 
       for
         index: Int <-
@@ -39,7 +36,7 @@ object Swim:
 
     def sendIndirectPing(st: State, target: Address): Task[Unit] =
       val membersArr: IndexedSeq[Address] =
-        (st.members - target).toArray
+        (st.members - cfg.address - target).toArray
 
       for
         shuffledWithoutTarget: IndexedSeq[Address] <-
@@ -66,14 +63,9 @@ object Swim:
           // All indirect messages result in warnings, as they could indicate partial system failures
 
           case Some(Ping(pinger, acker)) if acker == cfg.address =>
-            val newAcc: State =
-              if acc.members.contains(pinger)
-              then acc
-              else acc.copy(members = acc.members + pinger, updates = acc.updates.joined(pinger))
-
             ZIO.logInfo(s"Acking ping from $pinger")
               *> comms.send(pinger, Ack(pinger = pinger, acker = acker))
-              *> loop(tail, newAcc)
+              *> loop(tail, acc)
 
           case Some(p @ Ping(_, acker)) =>
             ZIO.logWarning(s"Redirecting ping to $acker")
@@ -120,9 +112,17 @@ object Swim:
       case State(waitingOnAck, members, updates, aggTick) =>
         ZIO.succeed(State(waitingOnAck, members, updates, aggTick + ticks))
 
+    val initState: State =
+      State(
+        waitingOnAck    = None,
+        members         = Set(cfg.address),
+        updates         = Updates.joined(cfg.address),
+        aggregatedTicks = Ticks.zero
+      )
+
     ZStream
       .fromSchedule(Ticks.schedule(cfg.tickSpeed.toMillis))
-      .runFoldZIO(State.empty)(handleExpirations(_, _).flatMap(handleMessages))
+      .runFoldZIO(initState)(handleExpirations(_, _).flatMap(handleMessages))
       *> ZIO.never
 
   end apply
