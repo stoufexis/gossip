@@ -11,7 +11,6 @@ object Swim:
   case class State(
     waitingOnAck:    Option[Address],
     members:         Members,
-    updates:         Updates,
     aggregatedTicks: Ticks
   )
 
@@ -91,35 +90,33 @@ object Swim:
       comms.receive.flatMap(loop(_, st))
 
     def handleExpirations(st: State, ticks: Ticks): Task[State] = st match
-      case State(None, members, updates, aggTick) if aggTick + ticks > cfg.pingPeriodTicks =>
+      case State(None, members, aggTick) if aggTick + ticks > cfg.pingPeriodTicks =>
         sendPing(st).map: waitingOnAck =>
-          State(Some(waitingOnAck), members, updates, Ticks.zero)
+          State(Some(waitingOnAck), members, Ticks.zero)
 
-      case State(Some(waitingOnAck), members, updates, aggTick) if aggTick + ticks > cfg.pingPeriodTicks =>
+      case State(Some(waitingOnAck), members, aggTick) if aggTick + ticks > cfg.pingPeriodTicks =>
         for
           _               <- ZIO.logWarning(s"Ping period expired. Removing $waitingOnAck from member list")
           newWaitingOnAck <- sendPing(st)
         yield State(
           Some(newWaitingOnAck),
           members - waitingOnAck,
-          updates.failed(waitingOnAck),
           Ticks.zero
         )
 
-      case State(Some(waitingOnAck), members, updates, aggTick) if aggTick + ticks > cfg.timeoutPeriodTicks =>
+      case State(Some(waitingOnAck), members, aggTick) if aggTick + ticks > cfg.timeoutPeriodTicks =>
         for
           _ <- ZIO.logWarning(s"Direct ping period expired")
           _ <- sendIndirectPing(st, waitingOnAck)
-        yield State(Some(waitingOnAck), members, updates, aggTick + ticks)
+        yield State(Some(waitingOnAck), members, aggTick + ticks)
 
-      case State(waitingOnAck, members, updates, aggTick) =>
-        ZIO.succeed(State(waitingOnAck, members, updates, aggTick + ticks))
+      case State(waitingOnAck, members, aggTick) =>
+        ZIO.succeed(State(waitingOnAck, members, aggTick + ticks))
 
     val initState: State =
       State(
         waitingOnAck    = None,
         members         = Members.current(cfg.address),
-        updates         = Updates.joined(cfg.address),
         aggregatedTicks = Ticks.zero
       )
 
