@@ -62,12 +62,23 @@ object Swim:
 
           // All indirect messages result in warnings, as they could indicate partial system failures
 
-          case Some(Ping(pinger, acker)) if acker == cfg.address =>
-            ZIO.logInfo(s"Acking ping from $pinger")
-              *> comms.send(pinger, Ack(pinger = pinger, acker = acker))
+          // Drop messages from non-members
+          case Some(Ping(pinger, _)) if !st.members.isMember(pinger) =>
+            ZIO.logWarning(s"Dropping message from $pinger, as it is not a recognized member.")
               *> loop(tail, acc)
 
-          case Some(p @ Ping(_, acker)) =>
+          case Some(Ack(_, acker)) if !st.members.isMember(acker) =>
+            ZIO.logWarning(s"Dropping message from $acker, as it is not a recognized member.")
+              *> loop(tail, acc)
+
+          // handle messages from members
+
+          case Some(Ping(pinger, acker)) if acker == cfg.address =>
+            ZIO.logInfo(s"Acking ping from $pinger")
+              *> comms.send(pinger, Ack(pinger = pinger, acker = cfg.address))
+              *> loop(tail, acc)
+
+          case Some(p @ Ping(pinger, acker)) =>
             ZIO.logWarning(s"Redirecting ping to $acker")
               *> comms.send(acker, p)
               *> loop(tail, acc)
@@ -94,7 +105,7 @@ object Swim:
 
       case State(Some(waitingOnAck), members, updates, aggTick) if aggTick + ticks > cfg.pingPeriodTicks =>
         for
-          _               <- ZIO.logWarning(s"Ping period expired while waiting for $waitingOnAck")
+          _               <- ZIO.logWarning(s"Ping period expired. Removing $waitingOnAck from member list")
           newWaitingOnAck <- sendPing(st)
         yield State(
           Some(newWaitingOnAck),
@@ -105,7 +116,7 @@ object Swim:
 
       case State(Some(waitingOnAck), members, updates, aggTick) if aggTick + ticks > cfg.timeoutPeriodTicks =>
         for
-          _ <- ZIO.logWarning(s"Direct ping period expired while waiting for $waitingOnAck")
+          _ <- ZIO.logWarning(s"Direct ping period expired")
           _ <- sendIndirectPing(st, waitingOnAck)
         yield State(Some(waitingOnAck), members, updates, aggTick + ticks)
 

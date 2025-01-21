@@ -1,6 +1,9 @@
 package com.stoufexis.swim.types
 
 case class Members(current: Address, others: Set[Address]):
+  def isMember(addr: Address): Boolean =
+    others.contains(addr)
+
   def othersIndexed: IndexedSeq[Address] =
     others.toArray
 
