@@ -31,7 +31,7 @@ object Swim:
           ZIO.logInfo(s"Pinging $target")
 
         _ <-
-          comms.send(target, Ping(pinger = cfg.address, acker = target))
+          comms.send(target, Ping(from = cfg.address, to = target))
       yield target
 
     def sendIndirectPing(st: State, target: Address): Task[Unit] =
@@ -50,50 +50,42 @@ object Swim:
 
         _ <-
           ZIO.foreach(indirectTargets): via =>
-            comms.send(via, Ping(pinger = cfg.address, acker = target))
+            comms.send(via, Ping(from = cfg.address, to = target))
       yield ()
 
     def handleMessages(st: State): Task[State] =
+      /** Note that when receiving a message that requires redirection a warning is logged, as it could
+        * indicate partial system failures.
+        */
       def loop(remainder: Chunk[Message], acc: State): Task[State] =
         def tail = remainder.tail
 
         remainder.headOption match
           case None => ZIO.succeed(acc)
 
-          // All indirect messages result in warnings, as they could indicate partial system failures
-
           // Drop messages from non-members
-          case Some(Ping(pinger, _)) if !st.members.isMember(pinger) =>
-            ZIO.logWarning(s"Dropping message from $pinger, as it is not a recognized member.")
+          case Some(msg) if !st.members.isMember(msg.from) =>
+            ZIO.logWarning(s"Dropping message from ${msg.from}, as it is not a recognized member")
               *> loop(tail, acc)
 
-          case Some(Ack(_, acker)) if !st.members.isMember(acker) =>
-            ZIO.logWarning(s"Dropping message from $acker, as it is not a recognized member.")
+          // handle messages directed to us
+          case Some(Ping(from, to)) if to == cfg.address =>
+            ZIO.logInfo(s"Acking ping from $from")
+              *> comms.send(from, Ack(from = cfg.address, to = from))
               *> loop(tail, acc)
 
-          // handle messages from members
-
-          case Some(Ping(pinger, acker)) if acker == cfg.address =>
-            ZIO.logInfo(s"Acking ping from $pinger")
-              *> comms.send(pinger, Ack(pinger = pinger, acker = cfg.address))
-              *> loop(tail, acc)
-
-          case Some(p @ Ping(pinger, acker)) =>
-            ZIO.logWarning(s"Redirecting ping to $acker")
-              *> comms.send(acker, p)
-              *> loop(tail, acc)
-
-          case Some(Ack(pinger, acker)) if acc.waitingOnAck.exists(_ == acker) && pinger == cfg.address =>
-            ZIO.logInfo(s"Received valid ack from $acker")
+          case Some(Ack(from, to)) if to == cfg.address && acc.waitingOnAck.exists(_ == from) =>
+            ZIO.logInfo(s"Received valid ack from $from")
               *> loop(tail, acc.copy(waitingOnAck = None))
 
-          case Some(Ack(pinger, acker)) if pinger == cfg.address =>
-            ZIO.logWarning(s"Received unexpected ack from $acker")
+          case Some(Ack(from, to)) if to == cfg.address =>
+            ZIO.logWarning(s"Received unexpected ack from $from")
               *> loop(tail, acc)
 
-          case Some(a @ Ack(pinger, _)) =>
-            ZIO.logWarning(s"Redirecting ack to $pinger")
-              *> comms.send(pinger, a)
+          // redirect any message aiming at a dirrent node
+          case Some(msg) =>
+            ZIO.logWarning(s"Redirecting message to ${msg.to}")
+              *> comms.send(msg.to, msg)
               *> loop(tail, acc)
 
       comms.receive.flatMap(loop(_, st))
