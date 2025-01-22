@@ -59,7 +59,7 @@ object Swim:
 
           case Some(TerminatingMessage(Ping, from, _)) =>
             ZIO.logDebug(s"Acking ping from $from")
-              *> comms.send(from, Message(Ping, from = cfg.address, to = from))
+              *> comms.send(from, Message(Ack, from = cfg.address, to = from))
               *> loop(tail, acc)
 
           case Some(TerminatingMessage(Ack, from, _)) if acc.waitingOnAck.exists(_ == from) =>
