@@ -4,7 +4,6 @@ import zio.*
 import zio.stream.*
 
 import com.stoufexis.swim.address.*
-import com.stoufexis.swim.message.*
 
 object Swim:
   def run: RIO[Comms & SwimConfig, Nothing] =

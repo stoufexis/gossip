@@ -3,7 +3,6 @@ package com.stoufexis.swim
 import zio.*
 
 import com.stoufexis.swim.address.*
-import com.stoufexis.swim.message.*
 
 // import java.net.InetSocketAddress
 // import java.nio.ByteBuffer
