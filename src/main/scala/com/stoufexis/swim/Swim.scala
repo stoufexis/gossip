@@ -54,14 +54,14 @@ object Swim:
 
           // messages for which a remote address is the receipient
 
-          case Some(Redirect(msg)) if !st.members.isOperational(msg.to) =>
-            ZIO.logWarning(s"Dropping message aimed at ${msg.to}, as it is not an operational member")
-              *> loop(tail, acc)
-
           case Some(Redirect(msg)) =>
-            ZIO.logWarning(s"Redirecting message to ${msg.to}")
-              *> comms.send(msg.to, msg)
-              *> loop(tail, acc)
+            if !st.members.isOperational(msg.to) then
+              ZIO.logWarning(s"Dropping message aimed at ${msg.to}, as it is not an operational member")
+                *> loop(tail, acc)
+            else
+              ZIO.logWarning(s"Redirecting message to ${msg.to}")
+                *> comms.send(msg.to, msg)
+                *> loop(tail, acc)
 
           // messages we are the receipient for
 
