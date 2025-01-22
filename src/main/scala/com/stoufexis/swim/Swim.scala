@@ -14,6 +14,8 @@ object Swim:
 
   // TODO reduce overall duplication and move to seperate files maybe
   def runWithEnv(comms: Comms, cfg: SwimConfig): Task[Nothing] =
+    import MessageType.*
+
     case class State(
       waitingOnAck: Option[RemoteAddress],
       members:      Members,
@@ -27,15 +29,6 @@ object Swim:
 
       def randomElements(take: Int): UIO[Vector[A]] =
         ZIO.randomWith(_.shuffle(v).map(_.take(take)))
-
-    object Redirect:
-      def unapply(in: IncomingMessage): Option[OutgoingMessage] =
-        cfg.address.check(in.to).left.toOption.map: to =>
-          in match
-            case IncomingMessage.Ping(from, _)    => OutgoingMessage.Ping(from, to)
-            case IncomingMessage.Ack(from, _)     => OutgoingMessage.Ack(from, to)
-            case IncomingMessage.Join(from, _)    => OutgoingMessage.Join(from, to)
-            case IncomingMessage.JoinAck(from, _) => OutgoingMessage.JoinAck(from, to)
 
     def handleMessages(st: State): Task[State] =
       /** Note that when receiving a message that requires redirection a warning is logged, as it could
@@ -54,40 +47,40 @@ object Swim:
 
           // messages for which a remote address is the receipient
 
-          case Some(Redirect(msg)) =>
-            if !st.members.isOperational(msg.to) then
-              ZIO.logWarning(s"Dropping message aimed at ${msg.to}, as it is not an operational member")
-                *> loop(tail, acc)
-            else
-              ZIO.logWarning(s"Redirecting message to ${msg.to}")
-                *> comms.send(msg.to, msg)
-                *> loop(tail, acc)
+          case Some(RedirectMessage(_, _, to)) if !st.members.isOperational(to) =>
+            ZIO.logWarning(s"Dropping message aimed at $to, as it is not an operational member")
+              *> loop(tail, acc)
+
+          case Some(msg @ RedirectMessage(_, _, to)) =>
+            ZIO.logWarning(s"Redirecting message to $to")
+              *> comms.send(to, msg)
+              *> loop(tail, acc)
 
           // messages we are the receipient for
 
-          case Some(IncomingMessage.Ping(from, _)) =>
+          case Some(TerminatingMessage(Ping, from, _)) =>
             ZIO.logDebug(s"Acking ping from $from")
-              *> comms.send(from, OutgoingMessage.Ack(from = cfg.address, to = from))
+              *> comms.send(from, Message(Ping, from = cfg.address, to = from))
               *> loop(tail, acc)
 
-          case Some(IncomingMessage.Ack(from, _)) if acc.waitingOnAck.exists(_ == from) =>
+          case Some(TerminatingMessage(Ack, from, _)) if acc.waitingOnAck.exists(_ == from) =>
             ZIO.logDebug(s"Received valid ack from $from")
               *> loop(tail, acc.copy(waitingOnAck = None))
 
-          case Some(IncomingMessage.Ack(from, _)) =>
+          case Some(TerminatingMessage(Ack, from, _)) =>
             ZIO.logWarning(s"Received unexpected ack from $from")
               *> loop(tail, acc)
 
-          case Some(IncomingMessage.Join(from, _)) =>
+          case Some(TerminatingMessage(Join, from, _)) =>
             ZIO.logInfo(s"Node $from is joining the cluster")
-              *> comms.send(from, OutgoingMessage.JoinAck(from = cfg.address, to = from))
+              *> comms.send(from, Message(JoinAck, from = cfg.address, to = from))
               *> loop(tail, acc.copy(members = acc.members.setAlive(from)))
 
-          case Some(IncomingMessage.JoinAck(from, _)) if acc.joiningVia.exists(_ == from) =>
+          case Some(TerminatingMessage(JoinAck, from, _)) if acc.joiningVia.exists(_ == from) =>
             ZIO.logInfo(s"Node $from confirmed our join")
               *> loop(tail, acc.copy(joiningVia = None))
 
-          case Some(IncomingMessage.JoinAck(from, _)) =>
+          case Some(TerminatingMessage(JoinAck, from, _)) =>
             ZIO.logWarning(s"Received unexpected join ack from $from")
               *> loop(tail, acc)
       comms.receive.flatMap(loop(_, st))
@@ -98,7 +91,7 @@ object Swim:
       for
         target <- members.getOperational.randomElement
         _      <- ZIO.logDebug(s"Pinging $target")
-        _      <- comms.send(target, OutgoingMessage.Ping(from = cfg.address, to = target))
+        _      <- comms.send(target, Message(Ping, from = cfg.address, to = target))
       yield target
 
     def sendIndirectPing(members: Members, target: RemoteAddress): Task[Unit] =
@@ -113,14 +106,14 @@ object Swim:
 
         _ <-
           ZIO.foreach(indirectTargets): via =>
-            comms.send(via, OutgoingMessage.Ping(from = cfg.address, to = target))
+            comms.send(via, Message(Ping, from = cfg.address, to = target))
       yield ()
 
     def sendJoin(seedNodes: Set[RemoteAddress]): Task[RemoteAddress] =
       for
         target <- seedNodes.toVector.randomElement
         _      <- ZIO.logInfo(s"Joining via $target")
-        _      <- comms.send(target, OutgoingMessage.Join(from = cfg.address, to = target))
+        _      <- comms.send(target, Message(Join, from = cfg.address, to = target))
       yield target
 
     def sendMessages(st: State, ticks: Ticks): Task[State] =
