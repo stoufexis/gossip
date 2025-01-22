@@ -6,18 +6,22 @@ import zio.stream.*
 import com.stoufexis.swim.types.*
 
 object Swim:
-  import Message.*
-
-  case class State(
-    waitingOnAck: Option[Address],
-    members:      Members,
-    tick:         Ticks,
-    joiningVia:   Option[Address]
-  ):
-    def joining: Boolean = joiningVia.isDefined
-
+  def run: RIO[Comms & SwimConfig, Nothing] =
+    ZIO.service[Comms]
+      .zip(ZIO.service[SwimConfig])
+      .flatMap(runWithEnv(_, _))
+  
   // TODO reduce overall duplication and move to seperate files maybe
-  def apply(comms: Comms, cfg: SwimConfig) =
+  def runWithEnv(comms: Comms, cfg: SwimConfig): Task[Nothing] =
+    import Message.*
+
+    case class State(
+      waitingOnAck: Option[Address],
+      members:      Members,
+      tick:         Ticks,
+      joiningVia:   Option[Address]
+    )
+
     extension [A](v: Vector[A])
       def randomElement: UIO[A] =
         ZIO.randomWith(_.nextIntBetween(0, v.length).map(v(_)))
@@ -212,4 +216,4 @@ object Swim:
       n: Nothing <- ZIO.never
     yield n
 
-  end apply
+  end runWithEnv
