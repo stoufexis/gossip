@@ -9,9 +9,9 @@ case class Members(current: Address, others: Map[Address, MemberState]):
 
   def isOperational(addr: Address): Boolean = ???
 
-  def getOperational: IndexedSeq[Address] = ???
+  def getOperational: Vector[Address] = ???
 
-  def getOperationalWithout(addr: Address): IndexedSeq[Address] = ???
+  def getOperationalWithout(addr: Address): Vector[Address] = ???
 
 object Members:
   def current(current: Address): Members = ???
