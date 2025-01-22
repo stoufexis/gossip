@@ -1,4 +1,4 @@
-package com.stoufexis.swim.types
+package com.stoufexis.swim
 
 import zio.*
 import zio.Schedule.*

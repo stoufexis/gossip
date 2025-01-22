@@ -5,12 +5,8 @@ lazy val compileFlags: Seq[String] =
     "-feature",
     "-Xkind-projector:underscores",
     "-Wvalue-discard",
-    "-Wunused:implicits",
-    "-Wunused:explicits",
-    "-Wunused:imports",
-    "-Wunused:locals",
-    "-Wunused:params",
-    "-Wunused:privates",
+    "-Wunused:all",
+    "-Wunused:unsafe-warn-patvars",
     "-source:future"
   )
 
@@ -25,8 +21,8 @@ lazy val root = project
     name         := "zio-swim",
     version      := "0.1.0-SNAPSHOT",
     scalaVersion := scala3Version,
-    scalacOptions ++= compileFlags,
     javacOptions ++= Seq("-source", "21", "-target", "21"),
+    scalacOptions ++= compileFlags,
     libraryDependencies ++= deps,
     libraryDependencies += "org.scalameta" %% "munit" % "1.0.0" % Test
   )
