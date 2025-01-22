@@ -1,19 +1,17 @@
 package com.stoufexis.swim.types
 
-case class Members(current: Address, others: Set[Address]):
-  def isMember(addr: Address): Boolean =
-    others.contains(addr)
+// Add MemberState to members
+// Updates sent to other nodes are simply the state of nodes in the memberlist
+case class Members(current: Address, others: Map[Address, MemberState]):
+  def setAlive(addr: Address): Members = ???
 
-  def othersIndexed: IndexedSeq[Address] =
-    others.toArray
+  def setFailed(addr: Address): Members = ???
 
-  def othersIndexedWithout(addr: Address): IndexedSeq[Address] =
-    (others - addr).toArray
+  def isOperational(addr: Address): Boolean = ???
 
-  infix def -(addr: Address): Members = Members(current, others - addr)
+  def getOperational: IndexedSeq[Address] = ???
 
-  infix def +(addr: Address): Members =
-    if addr == current then this else Members(current, others - addr)
+  def getOperationalWithout(addr: Address): IndexedSeq[Address] = ???
 
 object Members:
-  def current(current: Address): Members = Members(current, Set.empty)
+  def current(current: Address): Members = ???

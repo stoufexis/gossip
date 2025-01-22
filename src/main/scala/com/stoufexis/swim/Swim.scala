@@ -17,7 +17,7 @@ object Swim:
   def apply(comms: Comms, cfg: SwimConfig) =
     def sendPing(st: State): Task[Address] =
       val membersArr: IndexedSeq[Address] =
-        st.members.othersIndexed
+        st.members.getOperational
 
       for
         index: Int <-
@@ -35,7 +35,7 @@ object Swim:
 
     def sendIndirectPing(st: State, target: Address): Task[Unit] =
       val membersArr: IndexedSeq[Address] =
-        st.members.othersIndexedWithout(target)
+        st.members.getOperationalWithout(target)
 
       for
         shuffledWithoutTarget: IndexedSeq[Address] <-
@@ -62,9 +62,9 @@ object Swim:
         remainder.headOption match
           case None => ZIO.succeed(acc)
 
-          // Drop messages from non-members
-          case Some(msg) if !st.members.isMember(msg.from) =>
-            ZIO.logWarning(s"Dropping message from ${msg.from}, as it is not a recognized member")
+          // Drop messages from non-members or failed members
+          case Some(msg) if !st.members.isOperational(msg.from) =>
+            ZIO.logWarning(s"Dropping message from ${msg.from}, as it is not an operational member")
               *> loop(tail, acc)
 
           // handle messages directed to us
@@ -96,11 +96,11 @@ object Swim:
 
       case State(Some(waitingOnAck), members, aggTick) if aggTick + ticks > cfg.pingPeriodTicks =>
         for
-          _               <- ZIO.logWarning(s"Ping period expired. Removing $waitingOnAck from member list")
+          _               <- ZIO.logWarning(s"Ping period expired. Declaring $waitingOnAck as failed")
           newWaitingOnAck <- sendPing(st)
         yield State(
           Some(newWaitingOnAck),
-          members - waitingOnAck,
+          members.setFailed(waitingOnAck),
           Ticks.zero
         )
 
@@ -122,7 +122,7 @@ object Swim:
 
     ZStream
       .fromSchedule(Ticks.schedule(cfg.tickSpeed.toMillis))
-      .runFoldZIO(initState)(handleExpirations(_, _).flatMap(handleMessages))
+      .runFoldZIO(initState)((st, ts) => handleMessages(st).flatMap(handleExpirations(_, ts)))
       *> ZIO.never
 
   end apply
