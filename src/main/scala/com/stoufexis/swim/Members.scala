@@ -4,12 +4,17 @@ import com.stoufexis.swim.address.*
 
 // Updates sent to other nodes are simply the state of nodes in the memberlist
 case class Members(map: Map[RemoteAddress, (MemberState, Int)]):
+  def set(addr: RemoteAddress, ms: MemberState): Members =
+    Members(map.updated(addr, (ms, 0)))
+
   def setAlive(addr: RemoteAddress): Members =
-    ???
+    set(addr, MemberState.Alive)
 
-  def setFailed(addr: RemoteAddress): Members = ???
+  def setFailed(addr: RemoteAddress): Members =
+    set(addr, MemberState.Failed)
 
-  def isOperational(addr: RemoteAddress): Boolean = ???
+  def isOperational(addr: RemoteAddress): Boolean =
+    map.get(addr).exists(_._1.isOperational)
 
   def getOperational: Set[RemoteAddress] =
     map.filter(_._2._1.isOperational).keySet
