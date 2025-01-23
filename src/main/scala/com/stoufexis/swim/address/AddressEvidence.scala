@@ -1,7 +1,7 @@
 package com.stoufexis.swim.address
 
 /** To reduce the code and mental overhead of always having to check whether an address represents the current
-  * node or a different node, this type, along with RemoteAddress are introduced. They allow for only checking
+  * node or a different node, these types are introduced. They allow for only checking
   * a single time, and marking the result of the check in the type system, allowing other functions to
   * explicitly request the type of address they require.
   *
