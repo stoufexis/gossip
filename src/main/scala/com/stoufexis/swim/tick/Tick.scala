@@ -1,4 +1,4 @@
-package com.stoufexis.swim
+package com.stoufexis.swim.tick
 
 import zio.*
 import zio.Schedule.*

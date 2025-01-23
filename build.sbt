@@ -1,9 +1,9 @@
-val scala3Version = "3.6.2"
+val scala3Version = "3.3.4"
 
 lazy val compileFlags: Seq[String] =
   Seq(
     "-feature",
-    "-Xkind-projector:underscores",
+    "-Ykind-projector:underscores",
     "-Wvalue-discard",
     "-Wunused:all",
     "-Wunused:unsafe-warn-patvars",

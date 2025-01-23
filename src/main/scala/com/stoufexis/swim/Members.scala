@@ -27,18 +27,21 @@ case class Members(map: Map[RemoteAddress, (MemberState, Int)]):
     *   [[SWIM paper https://www.cs.cornell.edu/projects/Quicksilver/public_pdfs/SWIM.pdf]]
     * @return
     *   The latest member states per remote address. If an element has been disseminated λ*log(n) times, it is
-    *   skipped. The returned lazy list is ordered by ascending dissemination count, i.e. the elements that
+    *   skipped. The list is ordered by ascending dissemination count, i.e. the elements that
     *   have been disseminated fewer times are first.
     */
-  def updates(disseminationLimitConstant: Int): LazyList[(RemoteAddress, MemberState)] =
+  def updates(disseminationLimitConstant: Int): List[(RemoteAddress, MemberState)] =
     val cutoff = (disseminationLimitConstant * Math.log10(map.size)).toInt
-
-    LazyList
+  
+    // The memberlist should be relatively small (a few hundreads of elements at most usually)
+    // so we will accept this slightly unoptimized series of operations for now.
+    List
       .from(map)
       .sortBy { case (_, (_, dc)) => dc }
-      .collect { case (add, (st, dc)) if dc <= cutoff => (add, st) }
+      .takeWhile { case (_, (_, dc))  => dc <= cutoff }
+      .map { case (add, (st, _)) => (add, st) }
 
-  /** Increases the dissemination count for the given addresses
+  /** Increments the dissemination count for the latest updates of the given addresses
     */
   def disseminated(add: Set[RemoteAddress]): Members =
     Members(map.map { case (add, (ms, dc)) => (add, (ms, dc + 1)) })

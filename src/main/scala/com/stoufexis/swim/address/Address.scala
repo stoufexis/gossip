@@ -1,3 +1,5 @@
 package com.stoufexis.swim.address
 
-case class Address(host: String, port: Int)
+import com.stoufexis.swim.util.Codec
+
+case class Address(host: String, port: Int) derives Codec

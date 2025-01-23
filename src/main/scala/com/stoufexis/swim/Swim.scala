@@ -5,6 +5,7 @@ import zio.stream.*
 
 import com.stoufexis.swim.address.*
 import com.stoufexis.swim.util.*
+import com.stoufexis.swim.tick.Ticks
 
 object Swim:
   def run: RIO[Comms & SwimConfig, Nothing] =
@@ -40,40 +41,40 @@ object Swim:
 
           // messages for which a remote address is the receipient
 
-          case Some(RedirectMessage(_, _, to)) if !st.members.isOperational(to) =>
+          case Some(RedirectMessage(_, _, to, _)) if !st.members.isOperational(to) =>
             ZIO.logWarning(s"Dropping message aimed at $to, as it is not an operational member")
               *> loop(tail, acc)
 
-          case Some(msg @ RedirectMessage(_, _, to)) =>
+          case Some(msg @ RedirectMessage(_, _, to, _)) =>
             ZIO.logWarning(s"Redirecting message to $to")
               *> comms.send(to, msg)
               *> loop(tail, acc)
 
           // messages we are the receipient for
 
-          case Some(TerminatingMessage(Ping, from, _)) =>
+          case Some(TerminatingMessage(Ping, from, _, _)) =>
             ZIO.logDebug(s"Acking ping from $from")
               *> comms.send(from, Message(Ack, from = cfg.address, to = from))
               *> loop(tail, acc)
 
-          case Some(TerminatingMessage(Ack, from, _)) if acc.waitingOnAck.exists(_ == from) =>
+          case Some(TerminatingMessage(Ack, from, _, _)) if acc.waitingOnAck.exists(_ == from) =>
             ZIO.logDebug(s"Received valid ack from $from")
               *> loop(tail, acc.copy(waitingOnAck = None))
 
-          case Some(TerminatingMessage(Ack, from, _)) =>
+          case Some(TerminatingMessage(Ack, from, _, _)) =>
             ZIO.logWarning(s"Received unexpected ack from $from")
               *> loop(tail, acc)
 
-          case Some(TerminatingMessage(Join, from, _)) =>
+          case Some(TerminatingMessage(Join, from, _, _)) =>
             ZIO.logInfo(s"Node $from is joining the cluster")
               *> comms.send(from, Message(JoinAck, from = cfg.address, to = from))
               *> loop(tail, acc.copy(members = acc.members.setAlive(from)))
 
-          case Some(TerminatingMessage(JoinAck, from, _)) if acc.joiningVia.exists(_ == from) =>
+          case Some(TerminatingMessage(JoinAck, from, _, _)) if acc.joiningVia.exists(_ == from) =>
             ZIO.logInfo(s"Node $from confirmed our join")
               *> loop(tail, acc.copy(joiningVia = None))
 
-          case Some(TerminatingMessage(JoinAck, from, _)) =>
+          case Some(TerminatingMessage(JoinAck, from, _, _)) =>
             ZIO.logWarning(s"Received unexpected join ack from $from")
               *> loop(tail, acc)
 
