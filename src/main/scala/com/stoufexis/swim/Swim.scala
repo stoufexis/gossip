@@ -76,6 +76,7 @@ object Swim:
           case Some(TerminatingMessage(JoinAck, from, _)) =>
             ZIO.logWarning(s"Received unexpected join ack from $from")
               *> loop(tail, acc)
+
       comms.receive.flatMap(loop(_, st))
 
     end handleMessages
@@ -116,85 +117,83 @@ object Swim:
     ): Task[RemoteAddress] =
       for
         target: RemoteAddress <- tryExclude match
-          case Some(e) =>
-            NonEmptySet(seedNodes - e).fold(ZIO.succeed(e))(_.randomElem)
-
-          case None =>
-            seedNodes.randomElem
+          case Some(e) => NonEmptySet(seedNodes - e).fold(ZIO.succeed(e))(_.randomElem)
+          case None    => seedNodes.randomElem
 
         _ <- ZIO.logInfo(s"Joining via $target")
         _ <- comms.send(target, Message(Join, from = cfg.address, to = target))
       yield target
 
-    def sendMessages(st: State, ticks: Ticks): Task[State] =
-      st.joiningVia match
-        // We are currently in the join process and the join timeout has been exceeded. Pick a different seed node
-        case Some(joiningVia) if st.tick + ticks > cfg.joinPeriodTicks =>
-          sendJoin(cfg.seedNodes, Some(joiningVia)).map: newJoiningVia =>
-            State(
-              // this must be a None anyway, so overwrite it here instead of copying it from the state
-              waitingOnAck = None,
-              members      = st.members,
-              tick         = Ticks.zero,
-              joiningVia   = Some(newJoiningVia)
-            )
+    def sendMessages(st: State, ticks: Ticks): Task[State] = (st.joiningVia, st.waitingOnAck) match
+      // We are currently in the join process and the join timeout has been exceeded. Pick a different seed node
+      case (Some(joiningVia), None) if st.tick + ticks > cfg.joinPeriodTicks =>
+        sendJoin(cfg.seedNodes, Some(joiningVia)).map: newJoiningVia =>
+          State(
+            // this must be a None anyway, so overwrite it here instead of copying it from the state
+            waitingOnAck = None,
+            members      = st.members,
+            tick         = Ticks.zero,
+            joiningVia   = Some(newJoiningVia)
+          )
 
-        // We are currently in the join process and the join timeout has not been exceeded
-        case Some(joiningVia) =>
-          ZIO.succeed:
-            State(
-              waitingOnAck = None,
-              members      = st.members,
-              tick         = st.tick + ticks,
-              joiningVia   = Some(joiningVia)
-            )
+      // We are currently in the join process and the join timeout has not been exceeded
+      case (Some(joiningVia), None) =>
+        ZIO.succeed:
+          State(
+            waitingOnAck = None,
+            members      = st.members,
+            tick         = st.tick + ticks,
+            joiningVia   = Some(joiningVia)
+          )
 
-        // We are not in the joining process anymore, we begin pinging after a ping period from our last join message
-        case None =>
-          st.waitingOnAck match
-            // We are not waiting for any ack and a ping period passed. Ping another member.
-            case None if st.tick + ticks > cfg.pingPeriodTicks =>
-              sendPing(st.members).map: waitingOnAck =>
-                State(
-                  waitingOnAck = waitingOnAck,
-                  members      = st.members,
-                  tick         = Ticks.zero,
-                  joiningVia   = None
-                )
+      // We are not in the joining process anymore, we begin pinging after a ping period from our last join message
 
-            // Ping period passed and we have not received an ack for the pinged member. They have failed.
-            case Some(waitingOnAck) if st.tick + ticks > cfg.pingPeriodTicks =>
-              for
-                _               <- ZIO.logWarning(s"Ping period expired. Declaring $waitingOnAck as failed")
-                newWaitingOnAck <- sendPing(st.members)
-              yield State(
-                waitingOnAck = newWaitingOnAck,
-                members      = st.members.setFailed(waitingOnAck),
-                tick         = Ticks.zero,
-                joiningVia   = None
-              )
+      // We are not waiting for any ack and a ping period passed. Ping another member.
+      case (None, None) if st.tick + ticks > cfg.pingPeriodTicks =>
+        sendPing(st.members).map: waitingOnAck =>
+          State(
+            waitingOnAck = waitingOnAck,
+            members      = st.members,
+            tick         = Ticks.zero,
+            joiningVia   = None
+          )
 
-            // Direct ping period passed and we have not received an ack for the pinged member. Ping indirectly.
-            case Some(waitingOnAck) if st.tick + ticks > cfg.directPingPeriodTicks =>
-              for
-                _ <- ZIO.logWarning(s"Direct ping period expired for $waitingOnAck")
-                _ <- sendIndirectPing(st.members, waitingOnAck)
-              yield State(
-                waitingOnAck = Some(waitingOnAck),
-                members      = st.members,
-                tick         = st.tick + ticks,
-                joiningVia   = None
-              )
+      // Ping period passed and we have not received an ack for the pinged member. They have failed.
+      case (None, Some(waitingOnAck)) if st.tick + ticks > cfg.pingPeriodTicks =>
+        for
+          _               <- ZIO.logWarning(s"Ping period expired. Declaring $waitingOnAck as failed")
+          newWaitingOnAck <- sendPing(st.members)
+        yield State(
+          waitingOnAck = newWaitingOnAck,
+          members      = st.members.setFailed(waitingOnAck),
+          tick         = Ticks.zero,
+          joiningVia   = None
+        )
 
-            // No period has expired yet, keep waiting for the ack or not waiting for any ack
-            case waitingOnAck =>
-              ZIO.succeed:
-                State(
-                  waitingOnAck = waitingOnAck,
-                  members      = st.members,
-                  tick         = st.tick + ticks,
-                  joiningVia   = None
-                )
+      // Direct ping period passed and we have not received an ack for the pinged member. Ping indirectly.
+      case (None, Some(waitingOnAck)) if st.tick + ticks > cfg.directPingPeriodTicks =>
+        for
+          _ <- ZIO.logWarning(s"Direct ping period expired for $waitingOnAck")
+          _ <- sendIndirectPing(st.members, waitingOnAck)
+        yield State(
+          waitingOnAck = Some(waitingOnAck),
+          members      = st.members,
+          tick         = st.tick + ticks,
+          joiningVia   = None
+        )
+
+      // No period has expired yet, keep waiting for the ack or not waiting for any ack
+      case (None, waitingOnAck) =>
+        ZIO.succeed:
+          State(
+            waitingOnAck = waitingOnAck,
+            members      = st.members,
+            tick         = st.tick + ticks,
+            joiningVia   = None
+          )
+
+      case (Some(_), Some(_)) =>
+        ZIO.die(IllegalStateException("Joining and Pinging concurrently... Should be impossible!"))
 
     end sendMessages
 
