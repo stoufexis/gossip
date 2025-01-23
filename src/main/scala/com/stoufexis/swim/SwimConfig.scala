@@ -3,10 +3,11 @@ package com.stoufexis.swim
 import zio.Duration
 
 import com.stoufexis.swim.address.*
+import com.stoufexis.swim.util.*
 
 case class SwimConfig(
   address:                      CurrentAddress,
-  seedNodes:                    Set[RemoteAddress],
+  seedNodes:                    NonEmptySet[RemoteAddress],
   receiveBufferSize:            Int,
   tickSpeed:                    Duration,
   directPingPeriodTicks:        Int,
@@ -19,7 +20,7 @@ case class SwimConfig(
 object SwimConfig:
   def apply(
     address:                      Address,
-    seedNodes:                    Set[Address],
+    seedNodes:                    NonEmptySet[Address],
     receiveBufferSize:            Int = 1024,
     tickSpeed:                    Duration,
     directPingPeriodTicks:        Int,

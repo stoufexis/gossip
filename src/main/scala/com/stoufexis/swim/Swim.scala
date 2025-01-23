@@ -4,6 +4,7 @@ import zio.*
 import zio.stream.*
 
 import com.stoufexis.swim.address.*
+import com.stoufexis.swim.util.*
 
 object Swim:
   def run: RIO[Comms & SwimConfig, Nothing] =
@@ -21,13 +22,6 @@ object Swim:
       tick:         Ticks,
       joiningVia:   Option[RemoteAddress]
     )
-
-    extension [A](v: Vector[A])
-      def randomElement: UIO[A] =
-        ZIO.randomWith(_.nextIntBetween(0, v.length).map(v(_)))
-
-      def randomElements(take: Int): UIO[Vector[A]] =
-        ZIO.randomWith(_.shuffle(v).map(_.take(take)))
 
     def handleMessages(st: State): Task[State] =
       /** Note that when receiving a message that requires redirection a warning is logged, as it could
@@ -86,40 +80,57 @@ object Swim:
 
     end handleMessages
 
-    def sendPing(members: Members): Task[RemoteAddress] =
-      for
-        target <- members.getOperational.randomElement
-        _      <- ZIO.logDebug(s"Pinging $target")
-        _      <- comms.send(target, Message(Ping, from = cfg.address, to = target))
-      yield target
+    def sendPing(members: Members): Task[Option[RemoteAddress]] =
+      ZIO.foreach(NonEmptySet(members.getOperational))(_.randomElem).tap:
+        case Some(target) =>
+          ZIO.logDebug(s"Pinging $target")
+            *> comms.send(target, Message(Ping, from = cfg.address, to = target))
+
+        case None =>
+          ZIO.logInfo(s"No-one to ping")
 
     def sendIndirectPing(members: Members, target: RemoteAddress): Task[Unit] =
+      NonEmptySet(members.getOperationalWithout(target)) match
+        case Some(s) =>
+          for
+            indirectTargets <-
+              s.randomElems(cfg.failureDetectionSubgroupSize)
+
+            _ <-
+              ZIO.logWarning(s"Pinging $target indirectly through $indirectTargets")
+
+            _ <-
+              ZIO.foreach(indirectTargets): via =>
+                comms.send(via, Message(Ping, from = cfg.address, to = target))
+          yield ()
+
+        case None =>
+          ZIO.logWarning(s"No indirect targets for $target")
+
+    /** Send a join to one of the provided seed nodes, excluding the given tryExclude node. If after excluding
+      * `tryExclude` the seedNodes are empty, the `tryExclude` address is contacted instead.
+      */
+    def sendJoin(
+      seedNodes:  NonEmptySet[RemoteAddress],
+      tryExclude: Option[RemoteAddress] = None
+    ): Task[RemoteAddress] =
       for
-        indirectTargets <-
-          members
-            .getOperationalWithout(target)
-            .randomElements(cfg.failureDetectionSubgroupSize)
+        target: RemoteAddress <- tryExclude match
+          case Some(e) =>
+            NonEmptySet(seedNodes - e).fold(ZIO.succeed(e))(_.randomElem)
 
-        _ <-
-          ZIO.logWarning(s"Pinging $target indirectly through $indirectTargets")
+          case None =>
+            seedNodes.randomElem
 
-        _ <-
-          ZIO.foreach(indirectTargets): via =>
-            comms.send(via, Message(Ping, from = cfg.address, to = target))
-      yield ()
-
-    def sendJoin(seedNodes: Set[RemoteAddress]): Task[RemoteAddress] =
-      for
-        target <- seedNodes.toVector.randomElement
-        _      <- ZIO.logInfo(s"Joining via $target")
-        _      <- comms.send(target, Message(Join, from = cfg.address, to = target))
+        _ <- ZIO.logInfo(s"Joining via $target")
+        _ <- comms.send(target, Message(Join, from = cfg.address, to = target))
       yield target
 
     def sendMessages(st: State, ticks: Ticks): Task[State] =
       st.joiningVia match
         // We are currently in the join process and the join timeout has been exceeded. Pick a different seed node
         case Some(joiningVia) if st.tick + ticks > cfg.joinPeriodTicks =>
-          sendJoin(cfg.seedNodes - joiningVia).map: newJoiningVia =>
+          sendJoin(cfg.seedNodes, Some(joiningVia)).map: newJoiningVia =>
             State(
               // this must be a None anyway, so overwrite it here instead of copying it from the state
               waitingOnAck = None,
@@ -145,7 +156,7 @@ object Swim:
             case None if st.tick + ticks > cfg.pingPeriodTicks =>
               sendPing(st.members).map: waitingOnAck =>
                 State(
-                  waitingOnAck = Some(waitingOnAck),
+                  waitingOnAck = waitingOnAck,
                   members      = st.members,
                   tick         = Ticks.zero,
                   joiningVia   = None
@@ -157,7 +168,7 @@ object Swim:
                 _               <- ZIO.logWarning(s"Ping period expired. Declaring $waitingOnAck as failed")
                 newWaitingOnAck <- sendPing(st.members)
               yield State(
-                waitingOnAck = Some(newWaitingOnAck),
+                waitingOnAck = newWaitingOnAck,
                 members      = st.members.setFailed(waitingOnAck),
                 tick         = Ticks.zero,
                 joiningVia   = None
