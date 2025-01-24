@@ -15,32 +15,29 @@ trait Codec[A]:
   def decode(bytes: Chunk[Byte]): Option[(Chunk[Byte], A)]
 
 object Codec:
-  inline def derived[A](using m: Mirror.Of[A]): Codec[A] =
-    import scala.compiletime.*
+  import scala.compiletime.*
 
+  inline def derived[A](using m: Mirror.Of[A]): Codec[A] =
     inline m match
       case s: Mirror.SumOf[A] =>
         val ct = summonAll[Tuple.Map[s.MirroredElemTypes, Codec]].toArray
-        makeEnum(s)(ct(_).asInstanceOf[Codec[A]])
+        makeEnum(s)(ct.lift(_).asInstanceOf[Option[Codec[A]]])
 
       case p: Mirror.ProductOf[A] =>
         val ct = summonInline[Codec[p.MirroredElemTypes]]
         makeCaseClass(p)(using ct, summonInline)
 
-  val int:    Codec[Int]    = summon
-  val string: Codec[String] = summon
-  def chunk[A: Codec]: Codec[Chunk[A]] = summon
-
-  def makeEnum[A](m: Mirror.SumOf[A])(tc: Int => Codec[A]): Codec[A] =
+  def makeEnum[A](m: Mirror.SumOf[A])(tc: Int => Option[Codec[A]]): Codec[A] =
     new:
       def encode(a: A): Chunk[Byte] =
         val ord = m.ordinal(a)
-        summon[Codec[Int]].encode(ord) ++ tc(ord).encode(a)
+        summon[Codec[Int]].encode(ord) ++ tc(ord).get.encode(a)
 
       def decode(bytes: Chunk[Byte]): Option[(Chunk[Byte], A)] =
         for
           (remainder, ord) <- summon[Codec[Int]].decode(bytes)
-          (remainder, a)   <- tc(ord).decode(remainder)
+          codec            <- tc(ord)
+          (remainder, a)   <- codec.decode(remainder)
         yield (remainder, a)
 
   def makeCaseClass[A](m: Mirror.ProductOf[A])(using
@@ -64,6 +61,12 @@ object Codec:
           (remainder, a) <- ca.decode(bytes)
           b              <- g(a)
         yield (remainder, b)
+
+
+  given [A](using v: ValueOf[A]): Codec[A] = new:
+    def encode(a: A): Chunk[Byte] = Chunk()
+
+    def decode(bytes: Chunk[Byte]): Option[(Chunk[Byte], A)] = Some((bytes, v.value))
 
   given Codec[Int] with
     def encode(a: Int): Chunk[Byte] =
@@ -121,6 +124,3 @@ object Codec:
 
   given [A, B](using ca: Codec[A], cb: Codec[B]): Codec[Map[A, B]] =
     summon[Codec[Chunk[(A, B)]]].bimap(Chunk.from(_), a => Some(Map.from(a)))
-
-  def enumCodec[A](getOrdinal: A => Int, fromOrdinal: Int => Option[A]): Codec[A] =
-    summon[Codec[Int]].bimap(getOrdinal, fromOrdinal)

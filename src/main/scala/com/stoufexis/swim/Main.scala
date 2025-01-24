@@ -16,17 +16,17 @@ object Main extends App:
 
   val m2: RedirectMessage =
     RedirectMessage(
-      MessageType.Ping,
+      MessageType.Join,
       RemoteAddress.unsafe(Address("remote2", 4269)),
       RemoteAddress.unsafe(Address("remote2", 6942)),
       Map()
     )
 
-  val codec = summon[Codec[Chunk[Message]]]
+  // val codec = summon[Codec[Chunk[IncomingMessage]]]
 
-  val encoded: Chunk[Byte] = codec.encode(Chunk(m1, m2))
-  val (remainder, decoded) = codec.decode(encoded).get
+  // val encoded: Chunk[Byte] = codec.encode(Chunk(m1, m2))
+  // val (remainder, decoded) = codec.decode(encoded).get
 
-  println("ENCODED " + encoded.length)
-  println("REMAINDER " + remainder.length)
-  println("DECODED " + decoded)
+  // println("ENCODED " + encoded.length)
+  // println("REMAINDER " + remainder.length)
+  // println("DECODED " + decoded)

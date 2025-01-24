@@ -54,7 +54,7 @@ object Swim:
 
           case Some(TerminatingMessage(Ping, from, _, _)) =>
             ZIO.logDebug(s"Acking ping from $from")
-              *> comms.send(from, Message(Ack, from = cfg.address, to = from))
+              *> comms.send(from, InitiatingMessage(Ack, from = cfg.address, to = from))
               *> loop(tail, acc)
 
           case Some(TerminatingMessage(Ack, from, _, _)) if acc.waitingOnAck.exists(_ == from) =>
@@ -67,7 +67,7 @@ object Swim:
 
           case Some(TerminatingMessage(Join, from, _, _)) =>
             ZIO.logInfo(s"Node $from is joining the cluster")
-              *> comms.send(from, Message(JoinAck, from = cfg.address, to = from))
+              *> comms.send(from, InitiatingMessage(JoinAck, from = cfg.address, to = from))
               *> loop(tail, acc.copy(members = acc.members.setAlive(from)))
 
           case Some(TerminatingMessage(JoinAck, from, _, _)) if acc.joiningVia.exists(_ == from) =>
@@ -86,7 +86,7 @@ object Swim:
       ZIO.foreach(NonEmptySet(members.getOperational))(_.randomElem).tap:
         case Some(target) =>
           ZIO.logDebug(s"Pinging $target")
-            *> comms.send(target, Message(Ping, from = cfg.address, to = target))
+            *> comms.send(target, InitiatingMessage(Ping, from = cfg.address, to = target))
 
         case None =>
           ZIO.logInfo(s"No-one to ping")
@@ -103,7 +103,7 @@ object Swim:
 
             _ <-
               ZIO.foreach(indirectTargets): via =>
-                comms.send(via, Message(Ping, from = cfg.address, to = target))
+                comms.send(via, InitiatingMessage(Ping, from = cfg.address, to = target))
           yield ()
 
         case None =>
@@ -122,7 +122,7 @@ object Swim:
           case None    => seedNodes.randomElem
 
         _ <- ZIO.logInfo(s"Joining via $target")
-        _ <- comms.send(target, Message(Join, from = cfg.address, to = target))
+        _ <- comms.send(target, InitiatingMessage(Join, from = cfg.address, to = target))
       yield target
 
     def sendMessages(st: State, ticks: Ticks): Task[State] = (st.joiningVia, st.waitingOnAck) match
