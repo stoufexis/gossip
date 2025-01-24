@@ -1,22 +1,21 @@
-package com.stoufexis.swim
+package com.stoufexis.swim.comms
 
 import zio.*
 
 import com.stoufexis.swim.address.*
-import com.stoufexis.swim.message.*
 
 // import java.net.InetSocketAddress
 // import java.nio.ByteBuffer
 // import java.nio.channels.DatagramChannel
 
-trait Comms:
+trait Channel:
   /** Gets currently available messages from the input buffer. Returns immediatelly if there are none.
     */
-  def receive: Task[Chunk[IncomingMessage]]
+  def receive: Task[Chunk[Byte]]
 
   /** Backpressures if there is no room to output.
     */
-  def send(to: Address, message: OutgoingMessage): Task[Unit]
+  def send(to: Address, message: Chunk[Byte]): Task[Unit]
 
 // object Comms:
 //   val live: RLayer[Scope & SwimConfig, Comms] = ZLayer:

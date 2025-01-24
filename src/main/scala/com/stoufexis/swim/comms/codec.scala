@@ -1,11 +1,11 @@
-package com.stoufexis.swim.members
+package com.stoufexis.swim.comms
 
-import zio.Chunk
+import zio.*
 
 import com.stoufexis.swim.address.*
+import com.stoufexis.swim.members.*
 import com.stoufexis.swim.message.*
 import com.stoufexis.swim.util.*
-import com.stoufexis.swim.util.Codec.given_Codec_*:
 
 import scala.annotation.tailrec
 
