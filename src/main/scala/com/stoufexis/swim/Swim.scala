@@ -4,8 +4,10 @@ import zio.*
 import zio.stream.*
 
 import com.stoufexis.swim.address.*
-import com.stoufexis.swim.util.*
+import com.stoufexis.swim.members.*
+import com.stoufexis.swim.message.*
 import com.stoufexis.swim.tick.Ticks
+import com.stoufexis.swim.util.*
 
 object Swim:
   def run: RIO[Comms & SwimConfig, Nothing] =
@@ -175,7 +177,7 @@ object Swim:
 
       initState = State(
         waitingOnAck = None,
-        members      = Members.empty,
+        members      = members.Members.empty,
         tick         = Ticks.zero,
         joiningVia   = Some(joiningVia)
       )

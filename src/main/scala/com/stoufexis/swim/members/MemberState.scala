@@ -1,4 +1,4 @@
-package com.stoufexis.swim
+package com.stoufexis.swim.members
 
 import com.stoufexis.swim.util.Codec
 

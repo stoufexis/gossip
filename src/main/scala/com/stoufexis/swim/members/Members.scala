@@ -1,4 +1,6 @@
-package com.stoufexis.swim
+package com.stoufexis.swim.members
+
+import zio.Chunk
 
 import com.stoufexis.swim.address.*
 
@@ -27,24 +29,30 @@ case class Members(map: Map[RemoteAddress, (MemberState, Int)]):
     *   [[SWIM paper https://www.cs.cornell.edu/projects/Quicksilver/public_pdfs/SWIM.pdf]]
     * @return
     *   The latest member states per remote address. If an element has been disseminated λ*log(n) times, it is
-    *   skipped. The list is ordered by ascending dissemination count, i.e. the elements that
-    *   have been disseminated fewer times are first.
+    *   skipped. The list is ordered by ascending dissemination count, i.e. the elements that have been
+    *   disseminated fewer times are first.
     */
-  def updates(disseminationLimitConstant: Int): List[(RemoteAddress, MemberState)] =
+  def updates(disseminationLimitConstant: Int): Chunk[(RemoteAddress, MemberState)] =
     val cutoff = (disseminationLimitConstant * Math.log10(map.size)).toInt
-  
+
     // The memberlist should be relatively small (a few hundreads of elements at most usually)
     // so we will accept this slightly unoptimized series of operations for now.
-    List
+    Chunk
       .from(map)
       .sortBy { case (_, (_, dc)) => dc }
-      .takeWhile { case (_, (_, dc))  => dc <= cutoff }
+      .takeWhile { case (_, (_, dc)) => dc <= cutoff }
       .map { case (add, (st, _)) => (add, st) }
 
   /** Increments the dissemination count for the latest updates of the given addresses
     */
-  def disseminated(add: Set[RemoteAddress]): Members =
-    Members(map.map { case (add, (ms, dc)) => (add, (ms, dc + 1)) })
+  def disseminated(add: Map[RemoteAddress, MemberState]): Members = Members:
+    add.foldLeft(map):
+      case (acc, (address, mstate1)) =>
+        acc.updatedWith(address):
+          case Some((mstate2, dc)) if mstate1 == mstate2 =>
+            Some(mstate1, dc + 1)
+
+          case x => x
 
 object Members:
   def empty: Members = Members(Map.empty)

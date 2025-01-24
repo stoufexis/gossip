@@ -4,6 +4,8 @@ import zio.*
 
 import com.stoufexis.swim.address.*
 import com.stoufexis.swim.util.Codec
+import com.stoufexis.swim.members.*
+import com.stoufexis.swim.message.*
 
 object Main extends App:
   val m1: TerminatingMessage =
@@ -11,7 +13,7 @@ object Main extends App:
       MessageType.Ping,
       RemoteAddress.unsafe(Address("remote1", 4269)),
       CurrentAddress.unsafe(Address("current1", 6942)),
-      Map(Address("local", 111) -> MemberState.Failed)
+      Chunk(Address("local", 111) -> MemberState.Failed)
     )
 
   val m2: RedirectMessage =
@@ -19,7 +21,7 @@ object Main extends App:
       MessageType.Join,
       RemoteAddress.unsafe(Address("remote2", 4269)),
       RemoteAddress.unsafe(Address("remote2", 6942)),
-      Map()
+      Chunk()
     )
 
   // val codec = summon[Codec[Chunk[IncomingMessage]]]

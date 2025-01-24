@@ -1,4 +1,4 @@
-package com.stoufexis.swim
+package com.stoufexis.swim.message
 
 import com.stoufexis.swim.util.Codec
 
