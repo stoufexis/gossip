@@ -1,6 +1,6 @@
 package com.stoufexis.swim.members
 
-import com.stoufexis.swim.util.Codec
+import com.stoufexis.swim.comms.Codec
 
 enum MemberState derives Codec:
   case Alive, Failed//, Suspicious

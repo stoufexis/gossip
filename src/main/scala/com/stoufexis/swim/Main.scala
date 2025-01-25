@@ -3,9 +3,9 @@ package com.stoufexis.swim
 import zio.*
 
 import com.stoufexis.swim.address.*
-import com.stoufexis.swim.util.Codec
 import com.stoufexis.swim.members.*
 import com.stoufexis.swim.message.*
+// import com.stoufexis.swim.comms.*
 
 object Main extends App:
   val m1: TerminatingMessage =
@@ -13,7 +13,7 @@ object Main extends App:
       MessageType.Ping,
       RemoteAddress.unsafe(Address("remote1", 4269)),
       CurrentAddress.unsafe(Address("current1", 6942)),
-      Chunk(Address("local", 111) -> MemberState.Failed)
+      Chunk(Payload(Address("local", 111), MemberState.Failed))
     )
 
   val m2: RedirectMessage =
