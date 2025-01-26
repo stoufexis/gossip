@@ -3,6 +3,7 @@ package com.stoufexis.swim
 import zio.Duration
 
 import com.stoufexis.swim.address.*
+import com.stoufexis.swim.address.Address.*
 import com.stoufexis.swim.util.*
 
 case class SwimConfig(

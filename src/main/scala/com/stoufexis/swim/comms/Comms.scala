@@ -4,6 +4,7 @@ import zio.*
 
 import com.stoufexis.swim.SwimConfig
 import com.stoufexis.swim.address.*
+import com.stoufexis.swim.address.Address.*
 import com.stoufexis.swim.members.*
 import com.stoufexis.swim.message.*
 import com.stoufexis.swim.message.MessageType.*

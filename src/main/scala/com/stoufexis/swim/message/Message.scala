@@ -3,14 +3,16 @@ package com.stoufexis.swim.message
 import zio.Chunk
 
 import com.stoufexis.swim.address.*
+import com.stoufexis.swim.address.Address.*
+import com.stoufexis.swim.comms.*
 
-sealed trait IncomingMessage:
+sealed trait IncomingMessage derives Encoder:
   val typ:     MessageType
   val from:    RemoteAddress
   val to:      Address
   val payload: Chunk[Payload]
 
-sealed trait OutgoingMessage:
+sealed trait OutgoingMessage derives Encoder:
   val typ:     MessageType
   val from:    Address
   val to:      RemoteAddress
@@ -21,22 +23,22 @@ case class TerminatingMessage(
   from:    RemoteAddress,
   to:      CurrentAddress,
   payload: Chunk[Payload]
-) extends IncomingMessage
+) extends IncomingMessage derives Encoder
 
 case class InitiatingMessage(
   typ:     MessageType,
   from:    CurrentAddress,
   to:      RemoteAddress,
   payload: Chunk[Payload]
-) extends OutgoingMessage
-
-object InitiatingMessage:
-  inline def apply(typ: MessageType, from: CurrentAddress, to: RemoteAddress): InitiatingMessage =
-    InitiatingMessage(typ, from, to, Chunk())
+) extends OutgoingMessage derives Encoder
 
 case class RedirectMessage(
   typ:     MessageType,
   from:    RemoteAddress,
   to:      RemoteAddress,
   payload: Chunk[Payload]
-) extends IncomingMessage, OutgoingMessage
+) extends IncomingMessage, OutgoingMessage derives Encoder
+
+object InitiatingMessage:
+  inline def apply(typ: MessageType, from: CurrentAddress, to: RemoteAddress): InitiatingMessage =
+    InitiatingMessage(typ, from, to, Chunk())

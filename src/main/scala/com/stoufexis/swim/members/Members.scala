@@ -3,6 +3,8 @@ package com.stoufexis.swim.members
 import zio.Chunk
 
 import com.stoufexis.swim.address.*
+import com.stoufexis.swim.address.Address.*
+import com.stoufexis.swim.message.Payload
 
 // Updates sent to other nodes are simply the state of nodes in the memberlist
 case class Members(map: Map[RemoteAddress, (MemberState, Int)]):
@@ -42,6 +44,12 @@ case class Members(map: Map[RemoteAddress, (MemberState, Int)]):
       .sortBy { case (_, (_, dc)) => dc }
       .takeWhile { case (_, (_, dc)) => dc <= cutoff }
       .map { case (add, (st, _)) => (add, st) }
+
+  def append(chunk: Chunk[Payload]): Members = Members:
+    chunk.foldLeft(map):
+      case (acc, Payload(add: RemoteAddress, state)) => acc.updated(add, (state, 0))
+      // TODO To be implemented when the suspicion mechanism is in place
+      case (_, Payload(_: CurrentAddress, _)) => ???
 
   /** Increments the dissemination count for the latest updates of the given addresses
     */
