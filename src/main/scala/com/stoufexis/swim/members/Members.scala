@@ -49,7 +49,8 @@ case class Members(map: Map[RemoteAddress, (MemberState, Int)]):
     chunk.foldLeft(map):
       case (acc, Payload(add: RemoteAddress, state)) => acc.updated(add, (state, 0))
       // TODO To be implemented when the suspicion mechanism is in place
-      case (_, Payload(_: CurrentAddress, _)) => ???
+      // when receiving a suspicios message about ourselves disseminate an Alive message
+      case (acc, Payload(_: CurrentAddress, _)) => acc
 
   /** Increments the dissemination count for the latest updates of the given addresses
     */
