@@ -1,6 +1,7 @@
 package com.stoufexis.swim.address
 
 import com.stoufexis.swim.comms.*
+import com.stoufexis.swim.address.Address.*
 
 /** To reduce the code and mental overhead of always having to check whether an address represents the current
   * node or a different node, these types are introduced. They allow for only checking a single time, and
@@ -13,6 +14,11 @@ import com.stoufexis.swim.comms.*
 sealed trait Address derives Encoder:
   val host: String
   val port: Int
+
+  def remote: Option[RemoteAddress] = this match
+    case r: RemoteAddress => Some(r)
+    case _ => None
+  
 
 object Address:
   /**

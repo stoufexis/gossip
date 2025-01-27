@@ -12,8 +12,14 @@ import java.nio.charset.StandardCharsets
 trait Decoder[A]:
   def decode(bytes: Chunk[Byte]): Option[(Chunk[Byte], A)]
 
-  def map[B](f: A => B): Decoder[B] =
-    bs => decode(bs).map((rem, a) => (rem, f(a)))
+  def map[B](f: A => B): Decoder[B] = bs =>
+    decode(bs).map((rem, a) => (rem, f(a)))
+
+  def omap[B](f: A => Option[B]): Decoder[B] = bs =>
+    for
+      (rem, a) <- decode(bs)
+      b        <- f(a)
+    yield (rem, b)
 
 object Decoder:
   inline def derived[A](using m: Mirror.Of[A]): Decoder[A] =

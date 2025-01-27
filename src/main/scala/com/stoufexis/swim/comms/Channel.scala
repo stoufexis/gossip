@@ -2,7 +2,7 @@ package com.stoufexis.swim.comms
 
 import zio.*
 
-import com.stoufexis.swim.address.*
+import com.stoufexis.swim.address.Address.RemoteAddress
 
 // import java.net.InetSocketAddress
 // import java.nio.ByteBuffer
@@ -15,7 +15,7 @@ trait Channel:
 
   /** Backpressures if there is no room to output.
     */
-  def send(to: Address, message: Chunk[Byte]): Task[Unit]
+  def send(to: RemoteAddress, message: Chunk[Byte]): Task[Unit]
 
 // object Comms:
 //   val live: RLayer[Scope & SwimConfig, Comms] = ZLayer:

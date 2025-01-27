@@ -40,5 +40,10 @@ case class RedirectMessage(
 ) extends IncomingMessage, OutgoingMessage derives Encoder
 
 object InitiatingMessage:
-  inline def apply(typ: MessageType, from: CurrentAddress, to: RemoteAddress): InitiatingMessage =
-    InitiatingMessage(typ, from, to, Chunk())
+  def apply(
+    typ:     MessageType,
+    from:    CurrentAddress,
+    to:      RemoteAddress,
+    payload: Chunk[Payload] = Chunk()
+  ): InitiatingMessage =
+    new InitiatingMessage(typ, from, to, payload)

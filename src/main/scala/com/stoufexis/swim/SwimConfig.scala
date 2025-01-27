@@ -15,7 +15,8 @@ case class SwimConfig(
   pingPeriodTicks:              Int,
   joinPeriodTicks:              Int,
   failureDetectionSubgroupSize: Int,
-  disseminationConstant:        Int
+  disseminationLimit:           Int,
+  maxTransmissionUnit:          Int
 )
 
 object SwimConfig:
@@ -28,7 +29,8 @@ object SwimConfig:
     pingPeriodTicks:              Int,
     joinPeriodTicks:              Int,
     failureDetectionSubgroupSize: Int,
-    disseminationConstant:        Int
-  ): Either[String, SwimConfig] =
+    disseminationLimit:           Int,
+    maxTransmissionUnit:          Int
+  ): SwimConfig =
     // convert addresses to remote, current, checking validity
     ???
