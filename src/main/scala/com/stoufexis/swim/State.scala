@@ -7,7 +7,6 @@ import com.stoufexis.swim.address.Address.*
 import com.stoufexis.swim.members.*
 import com.stoufexis.swim.message.*
 import com.stoufexis.swim.tick.*
-import scala.annotation.tailrec
 
 
 // Updates sent to other nodes are simply the state of nodes in the memberlist
@@ -52,6 +51,12 @@ case class State(
 
   def resetTicks: State = 
     copy(tick = Ticks.zero)
+
+  def setTicks(ticks: Ticks): State = 
+    copy(tick = ticks)
+
+  def addTicks(ticks: Ticks): State = 
+    copy(tick = tick + ticks)
 
   /**
     * Appends the given updates and returns a series of updates that should be disseminated

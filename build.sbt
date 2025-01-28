@@ -11,8 +11,9 @@ lazy val compileFlags: Seq[String] =
   )
 
 lazy val deps: List[ModuleID] = List(
-  "dev.zio" %% "zio"         % "2.1.14",
-  "dev.zio" %% "zio-streams" % "2.1.14"
+  "dev.zio" %% "zio"           % "2.1.14",
+  "dev.zio" %% "zio-streams"   % "2.1.14",
+  "dev.zio" %% "zio-laws-laws" % "1.0.0-RC37"
 )
 
 lazy val root = project

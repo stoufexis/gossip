@@ -27,7 +27,7 @@ object Ticks:
           val decision: Decision =
             Decision.Continue(Interval.after(now.plus(Duration.fromMillis(tickEvery))))
 
-          ZIO.succeed(Some(now), 1, decision)
+          ZIO.succeed(Some(now), 0, decision)
 
         case Some(before) =>
           val passedTicks: Long =
