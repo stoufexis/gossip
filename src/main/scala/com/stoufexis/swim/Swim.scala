@@ -114,6 +114,8 @@ object Swim:
         val (iter, random2) = random.shuffle(nes)
         (iter.take(cnt), (state, random2))
 
+  end Pure
+
   def sendMessageUnbounded(to: RemoteAddress, message: OutgoingMessage): Pure[Unit] =
     ZPure.log(Output.Message(message.typ, to, Serde.encodeUnbounded(message)))
 
@@ -127,11 +129,10 @@ object Swim:
       _                 <- Pure.disseminated(included)
     yield ()
 
+  /** Note that when receiving a message that requires redirection a warning is logged, as it could indicate
+    * partial system or networking failures.
+    */
   def handleMessages(messages: Chunk[IncomingMessage]): Pure[Unit] =
-    /** Note that when receiving a message that requires redirection a warning is logged, as it could indicate
-      * partial system or networking failures.
-      */
-
     def loop(msg: IncomingMessage): Pure[Unit] = Pure.get.flatMap: st =>
       if !st.isOperational(msg.from) then
         Pure.warning(msg, "Dropping message as it is from a non-operational member")

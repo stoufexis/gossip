@@ -50,3 +50,5 @@ object Encoder:
 
   given chunk[A](using ca: Encoder[A]): Encoder[Chunk[A]] = a =>
     int.encode(a.size) ++ a.flatMap(ca.encode)
+
+  given bytes: Encoder[Chunk[Byte]] = a => a

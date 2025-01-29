@@ -24,14 +24,16 @@ object Serde:
 
     val remainingSpace: Int = maxBytes - fieldsBytes.size
 
-    // TODO: This is faulty as it does not include the length of the chunk in the encoded bytes
-    // so it is not equivalent to the unbounded encoder
+    /**
+      * Keeping bytes as a chunk of chunks will ensure that the length of the chunk
+      * will be added as the first 4 bytes, as the Chunk encoder will be used.
+      */
     @tailrec
     def loop(
-      remainder: Chunk[Payload],
-      included:  Set[RemoteAddress],
-      bytes:     Chunk[Byte]
-    ): (Set[RemoteAddress], Chunk[Byte]) =
+      remainder:     Chunk[Payload],
+      included:      Set[RemoteAddress],
+      bytes:         Chunk[Chunk[Byte]]
+    ): (Set[RemoteAddress], Chunk[Chunk[Byte]]) =
       if remainder.isEmpty then
         (included, bytes)
       else
@@ -40,9 +42,10 @@ object Serde:
         if bytes.size + bs.size > remainingSpace then
           (included, bytes)
         else
-          loop(remainder.tail, included + next.add, bytes ++ bs)
+          loop(remainder.tail, included + next.add, bytes.appended(bs))
 
-    loop(msg.payload, Set(), fieldsBytes)
+    val (includedAdds, bytes) = loop(msg.payload, Set(), Chunk())
+    (includedAdds, fieldsBytes ++ Codec.encode(bytes))
 
   def decodeAll(currentAddress: CurrentAddress): Chunk[Byte] => Either[String, Chunk[IncomingMessage]] =
     val destructuredDecoder: Decoder[(Meta, Chunk[Payload])] =
