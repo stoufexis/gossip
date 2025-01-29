@@ -2,9 +2,14 @@ package com.stoufexis.swim.util
 
 import zio.*
 
-// TODO: Check validity
+// TODO: Verify validity
+/** A pure pseudo-random number generator.
+  *
+  * Each method of each PseudoRandom object is referentially transparent, as it always returns the same value
+  * given the same parameters, along with the same next PseudoRandom instance, containing a new seed.
+  */
 class PseudoRandom(seed: Long):
-  def newSeed: Long =
+  private def newSeed: Long =
     (seed * 0x5deece66dL + 0xbL) & ((1L << 48) - 1)
 
   def nextInt(maxExclusive: Int): (Int, PseudoRandom) =
