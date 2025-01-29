@@ -21,6 +21,9 @@ case class State(
   members:            Map[RemoteAddress, (MemberState, Int)],
   disseminationLimit: Int
 ):
+  private lazy val cutoff: Int =
+    (disseminationLimit * Math.log10(members.size)).toInt
+
   private def setMembers(members2: Map[RemoteAddress, (MemberState, Int)]): State =
     copy(members = members2)
 
@@ -72,10 +75,8 @@ case class State(
     *   disseminated fewer times are first.
     */
   def updates: Chunk[Payload] =
-    val cutoff = (disseminationLimit * Math.log10(members.size)).toInt
-
     // The memberlist should be relatively small (a few hundreads of elements at most usually)
-    // so we will accept this slightly unoptimized series of operations for now.
+    // so we will accept this unoptimized series of operations for now.
     Chunk
       .from(members)
       .sortBy { case (_, (_, dc)) => dc }
