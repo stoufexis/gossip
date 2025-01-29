@@ -12,8 +12,7 @@ import com.stoufexis.swim.util.*
 
 /** Allows the definition of the main gossip logic completely purely. On every tick of the runloop, incoming
   * messages are read from the buffer, the state is transitioned and a number of outputs (logs and messages)
-  * are produced. Each of these iterations is modelled via a series of Pure programs, which are compiled and
-  * executed.
+  * are produced. Each of these iterations is modelled as a Pure program, which is interpreted and executed.
   *
   * Each output is modelled as an entry in the log and state is handled via the norma State parameter of
   * ZPure. In addition to the main state of the runloop, a pure Random number generator is provided.
