@@ -73,6 +73,9 @@ object Swim:
       join: Pure[Unit]
     ): Task[(State, PseudoRandom, Pure[Unit])] =
       for
+        _ <- ZIO.logDebug("Tick")
+        _ <- ZIO.whenDiscard(ts.prev != Ticks.zero)(ZIO.logWarning(s"Missed ${ts.prev} ticks"))
+
         messages: Chunk[IncomingMessage] <-
           receiveMessages
 

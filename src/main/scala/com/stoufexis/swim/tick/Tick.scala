@@ -15,6 +15,8 @@ object Ticks:
     inline infix def +(t1: Ticks): Ticks   = t + t1
     inline infix def >(t1: Ticks): Boolean = t > t1
     inline infix def >(i: Int): Boolean = t > i
+    inline infix def ==(t1: Ticks): Boolean = t == t1
+    inline infix def prev: Ticks = t - 1
 
   def schedule(tickEvery: Long): Schedule[Any, Any, Ticks] = new:
     type State = Option[OffsetDateTime]
