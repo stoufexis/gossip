@@ -10,6 +10,8 @@ import scala.collection.immutable.LongMap
 trait SignallingRef[A]:
   def set(a: A): UIO[Unit]
 
+  /** Emits the current value and then a stream of updates
+    */
   def updates: UStream[A]
 
 object SignallingRef:
@@ -18,9 +20,9 @@ object SignallingRef:
       def removeListener(id: Long): State =
         copy(listeners = listeners - id)
 
-      def addListener(q: Queue[A]): (Long, State) =
+      def addListener(q: Queue[A]): ((Long, A), State) =
         val nextId = maxId + 1
-        nextId -> State(value, listeners + (nextId -> q), nextId)
+        ((nextId, value), State(value, listeners + (nextId -> q), nextId))
 
       def newValue(a: A): State =
         copy(value = a)
@@ -39,14 +41,14 @@ object SignallingRef:
           .uninterruptible
 
       def updates: UStream[A] =
-        def acquire(q: Queue[A]): UIO[Long] =
+        def acquire(q: Queue[A]): UIO[(Long, A)] =
           ref.modify(_.addListener(q))
 
         def release(id: Long): UIO[Unit] =
           ref.update(_.removeListener(id))
 
         for
-          q   <- ZStream.fromZIO(Queue.sliding[A](1))
-          _   <- ZStream.acquireReleaseWith(acquire(q))(release)
-          out <- ZStream.fromQueue(q)
+          q      <- ZStream.fromZIO(Queue.sliding[A](1))
+          (_, a) <- ZStream.acquireReleaseWith(acquire(q))((id, _) => release(id))
+          out    <- ZStream.succeed(a) ++ ZStream.fromQueue(q)
         yield out
