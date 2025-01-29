@@ -1,4 +1,4 @@
-package com.stoufexis.swim.message
+package com.stoufexis.swim.model
 
 import com.stoufexis.swim.comms.Codec
 

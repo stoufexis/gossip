@@ -1,8 +1,7 @@
-package com.stoufexis.swim.message
+package com.stoufexis.swim.model
 
-import com.stoufexis.swim.address.Address.RemoteAddress
+import com.stoufexis.swim.model.Address.RemoteAddress
 import com.stoufexis.swim.comms.*
-import com.stoufexis.swim.members.MemberState
 
 // TODO: Rename to Updates and rename fields
 case class Payload(add: RemoteAddress, ms: MemberState) derives Encoder

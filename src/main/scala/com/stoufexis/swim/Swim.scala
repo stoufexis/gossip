@@ -4,13 +4,11 @@ import zio.*
 import zio.prelude.fx.ZPure
 import zio.stream.*
 
-import com.stoufexis.swim.address.*
-import com.stoufexis.swim.address.Address.*
 import com.stoufexis.swim.comms.*
-import com.stoufexis.swim.members.MemberState
-import com.stoufexis.swim.message.*
-import com.stoufexis.swim.pure.*
-import com.stoufexis.swim.pure.Pure.*
+import com.stoufexis.swim.model.*
+import com.stoufexis.swim.model.Address.*
+import com.stoufexis.swim.programs.*
+import com.stoufexis.swim.programs.Pure.*
 import com.stoufexis.swim.tick.*
 import com.stoufexis.swim.util.*
 

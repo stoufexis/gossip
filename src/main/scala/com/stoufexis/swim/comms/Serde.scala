@@ -2,12 +2,10 @@ package com.stoufexis.swim.comms
 
 import zio.*
 
-import com.stoufexis.swim.address.*
-import com.stoufexis.swim.address.Address.*
-import com.stoufexis.swim.members.*
-import com.stoufexis.swim.message.*
+import com.stoufexis.swim.model.Address.*
 
 import scala.annotation.tailrec
+import com.stoufexis.swim.model.*
 
 object Serde:
   // type used only for serialization/deserialization

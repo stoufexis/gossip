@@ -1,16 +1,15 @@
-package com.stoufexis.swim
+package com.stoufexis.swim.programs
 
 import zio.Chunk
 
-import com.stoufexis.swim.address.*
-import com.stoufexis.swim.address.Address.*
-import com.stoufexis.swim.members.*
-import com.stoufexis.swim.message.*
+import com.stoufexis.swim.model.*
+import com.stoufexis.swim.model.Address.*
 import com.stoufexis.swim.tick.*
 
-
-// Updates sent to other nodes are simply the state of nodes in the memberlist
-/** @param map
+/** @param waitingOnAck
+  * @param tick
+  * @param joiningVia
+  * @param members
   * @param disseminationLimit
   *   referenced as λ in the
   *   [[SWIM paper https://www.cs.cornell.edu/projects/Quicksilver/public_pdfs/SWIM.pdf]]
@@ -49,21 +48,20 @@ case class State(
   def getOperationalWithout(addr: RemoteAddress): Set[RemoteAddress] =
     members.removed(addr).filter(_._2._1.isOperational).keySet
 
-  def resetTicks: State = 
+  def resetTicks: State =
     copy(tick = Ticks.zero)
 
-  def setTicks(ticks: Ticks): State = 
+  def setTicks(ticks: Ticks): State =
     copy(tick = ticks)
 
-  def addTicks(ticks: Ticks): State = 
+  def addTicks(ticks: Ticks): State =
     copy(tick = tick + ticks)
 
-  /**
-    * Appends the given updates and returns a series of updates that should be disseminated
-    * to the node from which the append updates originated.
-    * 
-    * The returned updates are for nodes that were not included in the append updates.
-    * Sorted by asceding dissemination count.
+  /** Appends the given updates and returns a series of updates that should be disseminated to the node from
+    * which the append updates originated.
+    *
+    * The returned updates are for nodes that were not included in the append updates. Sorted by asceding
+    * dissemination count.
     */
   def appendAndGet(append: Chunk[Payload]): (Chunk[Payload], State) =
     ???

@@ -2,7 +2,7 @@ package com.stoufexis.swim.comms
 
 import zio.*
 
-import com.stoufexis.swim.address.Address.RemoteAddress
+import com.stoufexis.swim.model.Address.RemoteAddress
 
 // import java.net.InetSocketAddress
 // import java.nio.ByteBuffer

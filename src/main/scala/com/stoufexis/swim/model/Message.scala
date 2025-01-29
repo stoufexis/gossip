@@ -1,9 +1,8 @@
-package com.stoufexis.swim.message
+package com.stoufexis.swim.model
 
 import zio.Chunk
 
-import com.stoufexis.swim.address.*
-import com.stoufexis.swim.address.Address.*
+import com.stoufexis.swim.model.Address.*
 import com.stoufexis.swim.comms.*
 
 sealed trait IncomingMessage derives Encoder:

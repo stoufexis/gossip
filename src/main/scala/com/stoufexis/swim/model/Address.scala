@@ -1,7 +1,7 @@
-package com.stoufexis.swim.address
+package com.stoufexis.swim.model
 
 import com.stoufexis.swim.comms.*
-import com.stoufexis.swim.address.Address.*
+import com.stoufexis.swim.model.Address.*
 
 /** To reduce the code and mental overhead of always having to check whether an address represents the current
   * node or a different node, these types are introduced. They allow for only checking a single time, and
