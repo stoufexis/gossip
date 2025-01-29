@@ -47,11 +47,9 @@ object Pure:
     update(_.append(chunk))
 
   def appendAndGet(chunk: Chunk[Payload]): Pure[Chunk[Payload]] =
-    for
-      (st, r) <- ZPure.get[(State, PseudoRandom)]
-      (out, newState) = st.appendAndGet(chunk)
-      _ <- ZPure.set(newState, r)
-    yield out
+    ZPure.modify: (st, r) =>
+      val (out, newSt) = st.appendAndGet(chunk)
+      (out, (newSt, r))
 
   def peek[A](f: State => A): Pure[A] =
     ZPure.get.map((s, _) => f(s))
