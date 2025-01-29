@@ -8,16 +8,21 @@ import zio.*
   * Each method of each PseudoRandom object is referentially transparent, as it always returns the same value
   * given the same parameters, along with the same next PseudoRandom instance, containing a new seed.
   */
-class PseudoRandom(seed: Long):
-  private def newSeed: Long =
-    (seed * 0x5deece66dL + 0xbL) & ((1L << 48) - 1)
+trait PseudoRandom:
+  def nextInt(maxExclusive: Int): (Int, PseudoRandom)
 
-  def nextInt(maxExclusive: Int): (Int, PseudoRandom) =
-    (scala.util.Random(seed).nextInt(maxExclusive), PseudoRandom(newSeed))
-
-  def shuffle[A](iterable: Iterable[A]): (Iterable[A], PseudoRandom) =
-    (scala.util.Random(seed).shuffle(iterable), PseudoRandom(newSeed))
+  def shuffle[A](iterable: Iterable[A]): (Iterable[A], PseudoRandom)
 
 object PseudoRandom:
+  case class Impl(seed: Long) extends PseudoRandom:
+    def newSeed: Long =
+      (seed * 0x5deece66dL + 0xbL) & ((1L << 48) - 1)
+
+    def nextInt(maxExclusive: Int): (Int, PseudoRandom) =
+      (scala.util.Random(seed).nextInt(maxExclusive), Impl(newSeed))
+
+    def shuffle[A](iterable: Iterable[A]): (Iterable[A], PseudoRandom) =
+      (scala.util.Random(seed).shuffle(iterable), Impl(newSeed))
+
   def make: UIO[PseudoRandom] =
-    ZIO.randomWith(_.nextLong.map(PseudoRandom(_)))
+    ZIO.randomWith(_.nextLong.map(Impl(_)))
