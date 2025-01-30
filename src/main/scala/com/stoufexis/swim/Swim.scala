@@ -1,7 +1,6 @@
 package com.stoufexis.swim
 
 import zio.*
-import zio.prelude.fx.ZPure
 import zio.stream.*
 
 import com.stoufexis.swim.comms.*
@@ -13,7 +12,7 @@ import com.stoufexis.swim.tick.*
 import com.stoufexis.swim.util.*
 
 trait Swim:
-  def members: UStream[Map[Address, MemberState]]
+  def members: UStream[Map[Address, MemberStatus]]
 
 object Swim:
   val layer: URLayer[SwimConfig & Channel & Scope, Swim] = ZLayer:
@@ -66,12 +65,11 @@ object Swim:
           log(Level.Debug, "Sending message", annotations) *> chan.send(target, bytes)
 
     def pipeline(
-      ref:  SignallingRef[Map[Address, MemberState]],
+      ref:  SignallingRef[Map[Address, MemberStatus]],
       st:   State,
       rand: PseudoRandom,
-      ts:   Ticks,
-      join: Pure[Unit]
-    ): Task[(State, PseudoRandom, Pure[Unit])] =
+      ts:   Ticks
+    ): Task[(State, PseudoRandom)] =
       for
         _ <- ZIO.logDebug("Tick")
         _ <- ZIO.whenDiscard(ts.prev != Ticks.zero)(ZIO.logWarning(s"Missed ${ts.prev} ticks"))
@@ -80,37 +78,32 @@ object Swim:
           receiveMessages
 
         iteration: Pure[Unit] =
-          join *> handleMessages(messages) *> sendMessages(ts)
+          handleMessages(messages) *> handleTimeouts
 
-        (output: Chunk[Output], result: Either[Nothing, ((State, PseudoRandom), Unit)]) =
-          iteration.provideService(cfg).runAll((st, rand))
-
-        // Either has Nothing on Left, so this is safe
-        ((newState: State, newRand: PseudoRandom), _) =
-          result.right.get
+        (output: Chunk[Output], newState: State, newRand: PseudoRandom) =
+          singleIteration(cfg, ts, st, rand, messages)
 
         _ <- ref.set(newState.members.map((add, st) => (add, st._1)))
         _ <- handleOutput(output)
-      yield (newState, newRand, ZPure.unit)
+      yield (newState, newRand)
 
     val initState = State(
-      waitingOnAck       = None,
-      members            = Map(),
-      tick               = Ticks.zero,
-      joiningVia         = None,
-      disseminationLimit = cfg.disseminationLimit
+      waitingOnAck = Waiting.NeverWaited,
+      members      = Map(),
+      joiningVia   = Waiting.NeverWaited,
+      currentInfo  = MemberInfo(MemberStatus.Alive, 0, 0, Ticks.zero)
     )
 
-    def runLoop(rand: PseudoRandom, ref: SignallingRef[Map[Address, MemberState]]): Task[Unit] =
+    def runLoop(rand: PseudoRandom, ref: SignallingRef[Map[Address, MemberStatus]]): Task[Unit] =
       ZStream
         .fromSchedule(Ticks.schedule(cfg.tickSpeed.toMillis))
-        .runFoldZIO((initState, rand, sendJoin())):
-          case ((s, r, join), t) => pipeline(ref, s, r, t, join)
+        .runFoldZIO((initState, rand)):
+          case ((s, r), t) => pipeline(ref, s, r, t)
         .unit
 
     for
       rand <- PseudoRandom.make
-      ref  <- SignallingRef.make(Map.empty[Address, MemberState])
+      ref  <- SignallingRef.make(Map.empty[Address, MemberStatus])
       _    <- runLoop(rand, ref).forkIn(scope)
     yield new:
-      def members: UStream[Map[Address, MemberState]] = ref.updates
+      def members: UStream[Map[Address, MemberStatus]] = ref.updates

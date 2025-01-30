@@ -14,10 +14,10 @@ import com.stoufexis.swim.util.*
   * messages are read from the buffer, the state is transitioned and a number of outputs (logs and messages)
   * are produced. Each of these iterations is modelled as a Pure program, which is interpreted and executed.
   *
-  * Each output is modelled as an entry in the log and state is handled via the norma State parameter of
+  * Each output is modelled as an entry in the log and state is handled via the normal State parameter of
   * ZPure. In addition to the main state of the runloop, a pure Random number generator is provided.
   */
-type Pure[A] = ZPure[Output, (State, PseudoRandom), (State, PseudoRandom), SwimConfig, Nothing, A]
+type Pure[A] = ZPure[Output, (State, PseudoRandom), (State, PseudoRandom), SwimConfig & Ticks, Nothing, A]
 
 object Pure:
   enum Level:
@@ -30,22 +30,30 @@ object Pure:
   def update(f: State => State): Pure[Unit] =
     ZPure.update((s, r) => (f(s), r))
 
-  def setJoiningVia(jv: Option[RemoteAddress]): Pure[Unit] =
-    update(_.setJoiningVia(jv))
+  def modify[A](f: State => (A, State)): Pure[A] =
+    ZPure.modify: (s, r) =>
+      val (a, s2) = f(s)
+      (a, (s2, r))
 
-  def setWaitingOnAck(jv: Option[RemoteAddress]): Pure[Unit] =
-    update(_.setWaitingOnAck(jv))
+  def setJoining(via: RemoteAddress): Pure[Unit] =
+    ticks.flatMap(now => update(_.setJoining(via, now)))
 
-  def setAlive(a: RemoteAddress): Pure[Unit] =
-    update(_.setAlive(a))
+  def clearJoining: Pure[Unit] =
+    update(_.clearJoining)
 
-  def setFailed(a: RemoteAddress): Pure[Unit] =
-    update(_.setFailed(a))
+  def setWaitingOnAck(waitingOn: RemoteAddress): Pure[Unit] =
+    ticks.flatMap(now => update(_.setWaitingOnAck(waitingOn, now)))
 
-  def append(chunk: Chunk[Payload]): Pure[Unit] =
-    update(_.append(chunk))
+  def clearWaitingOnAck: Pure[Unit] =
+    update(_.clearWaitingOnAck)
 
-  def appendAndGet(chunk: Chunk[Payload]): Pure[Chunk[Payload]] =
+  def setSuspicious(a: RemoteAddress): Pure[Unit] =
+    ticks.flatMap(now => update(_.setSuspicious(a, now)))
+
+  def append(chunk: Chunk[Update]): Pure[Unit] =
+    ticks.flatMap(now => update(_.append(chunk, now)))
+
+  def appendAndGet(chunk: Chunk[Update]): Pure[Chunk[Update]] =
     ZPure.modify: (st, r) =>
       val (out, newSt) = st.appendAndGet(chunk)
       (out, (newSt, r))
@@ -56,8 +64,15 @@ object Pure:
   def get: Pure[State] =
     peek(identity)
 
-  def updates: Pure[Chunk[Payload]] =
-    peek(_.updates)
+  def inputs: Pure[(State, Ticks, SwimConfig)] =
+    for
+      state <- peek(identity)
+      cfg   <- config
+      ts    <- ticks
+    yield (state, ts, cfg)
+
+  def updates: Pure[Chunk[Update]] =
+    config.flatMap(cfg => peek(_.updates(cfg.address, cfg.disseminationConstant)))
 
   def getOperational: Pure[Set[RemoteAddress]] =
     peek(_.getOperational)
@@ -65,20 +80,14 @@ object Pure:
   def getOperationalWithout(add: RemoteAddress): Pure[Set[RemoteAddress]] =
     peek(_.getOperationalWithout(add))
 
-  def resetTicks: Pure[Unit] =
-    update(_.resetTicks)
-
-  def setTicks(ticks: Ticks): Pure[Unit] =
-    update(_.setTicks(ticks))
-
-  def addTicks(ticks: Ticks): Pure[Unit] =
-    update(_.addTicks(ticks))
-
-  def disseminated(diss: Set[RemoteAddress]): Pure[Unit] =
+  def disseminated(diss: Set[Address]): Pure[Unit] =
     update(_.disseminated(diss))
 
   def config: Pure[SwimConfig] =
-    ZPure.service
+    ZPure.service[(State, PseudoRandom), SwimConfig]
+
+  def ticks: Pure[Ticks] =
+    ZPure.service[(State, PseudoRandom), Ticks]
 
   def warning(msg: String): Pure[Unit] =
     ZPure.log(Output.Log(None, Level.Warn, msg))

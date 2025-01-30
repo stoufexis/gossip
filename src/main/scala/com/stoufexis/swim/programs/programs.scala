@@ -3,12 +3,14 @@ package com.stoufexis.swim.programs
 import zio.Chunk
 import zio.prelude.fx.ZPure
 
-import com.stoufexis.swim.model.Address.*
+import com.stoufexis.swim.SwimConfig
 import com.stoufexis.swim.comms.*
+import com.stoufexis.swim.model.*
+import com.stoufexis.swim.model.Address.*
+import com.stoufexis.swim.model.MessageType.*
+import com.stoufexis.swim.programs.Pure.Output
 import com.stoufexis.swim.tick.*
 import com.stoufexis.swim.util.*
-import com.stoufexis.swim.model.*
-import com.stoufexis.swim.model.MessageType.*
 
 def sendMessageUnbounded(to: RemoteAddress, message: OutgoingMessage): Pure[Unit] =
   Pure.message(message.typ, to, Serde.encodeUnbounded(message))
@@ -33,19 +35,19 @@ def handleMessages(messages: Chunk[IncomingMessage]): Pure[Unit] =
     else
       st.joiningVia match
         // Behavior when we are in the join process
-        case Some(joiningVia) =>
+        case Waiting.CurrentlyWaiting(joiningVia, _) =>
           // The only message we respond to is an expected joinAck directed at us
           msg match
             case TerminatingMessage(JoinAck, from, _, pl) if joiningVia == from =>
               Pure.info(msg, "Node confirmed out join")
-                *> Pure.setJoiningVia(None)
+                *> Pure.clearJoining
                 *> Pure.append(pl)
 
             case _ =>
               Pure.info(msg, "Dropping message as we are still joining")
 
         // Behavior when we are not in the join process
-        case None =>
+        case _ =>
           msg match
             case RedirectMessage(_, _, to, _) if !st.isOperational(to) =>
               Pure.warning(msg, "Dropping message as the receiver is not an operational member")
@@ -65,9 +67,9 @@ def handleMessages(messages: Chunk[IncomingMessage]): Pure[Unit] =
                 _       <- sendMessage(List(from), InitiatingMessage(Ack, cfg.address, from, updates))
               yield ()
 
-            case TerminatingMessage(Ack, from, _, pl) if st.waitingOnAck.exists(_ == from) =>
+            case TerminatingMessage(Ack, from, _, pl) if st.waitingOnAck.currentlyWaitingFor(from) =>
               Pure.debug(msg, "Received valid ack")
-                *> Pure.setWaitingOnAck(None)
+                *> Pure.clearWaitingOnAck
                 *> Pure.append(pl)
 
             // This message is likely old, so we dont accept its payload to guard against stale information
@@ -77,7 +79,6 @@ def handleMessages(messages: Chunk[IncomingMessage]): Pure[Unit] =
             case TerminatingMessage(Join, from, _, pl) =>
               for
                 cfg <- Pure.config
-                _   <- Pure.setAlive(from)
                 us  <- Pure.updates
 
                 _ <- Pure.info(msg, "Node is joining the cluster")
@@ -99,12 +100,12 @@ def pingRandomMember: Pure[Unit] =
         cfg    <- Pure.config
         target <- Pure.randomElem(addresses)
         us     <- Pure.updates
-        _      <- Pure.setWaitingOnAck(Some(target))
+        _      <- Pure.setWaitingOnAck(target)
         _      <- sendMessage(List(target), InitiatingMessage(Ping, cfg.address, target, us))
       yield ()
 
     case None =>
-      Pure.info("No-one to ping") *> Pure.setWaitingOnAck(None)
+      Pure.info("No-one to ping") *> Pure.clearWaitingOnAck
 
 def pingIndirectly(target: RemoteAddress): Pure[Unit] =
   Pure.getOperationalWithout(target).map(NonEmptySet(_)).flatMap:
@@ -134,47 +135,79 @@ def sendJoin(tryExclude: Option[RemoteAddress] = None): Pure[Unit] =
     _ <- Pure.info(s"Joining via $target")
     // There is no payload, so the bound does not apply
     _ <- sendMessageUnbounded(target, InitiatingMessage(Join, cfg.address, target, Chunk()))
-    _ <- Pure.setJoiningVia(Some(target))
+    _ <- Pure.setJoining(target)
   yield ()
 
-def sendMessages(ticks: Ticks): Pure[Unit] =
+def sendPings: Pure[Unit] =
   for
-    st  <- Pure.get
-    cfg <- Pure.config
+    (st, tick, cfg) <- Pure.inputs
+
+    _ <- st.waitingOnAck match
+      // We are not waiting for any ack and a ping period passed. Ping another member.
+      case Waiting.LastWaited(lastPing) if tick - lastPing > cfg.pingPeriodTicks =>
+        pingRandomMember
+
+      // Its not yet time to ping again
+      case Waiting.LastWaited(_) =>
+        ZPure.unit
+
+      // Ping period passed and we have not received an ack from the pinged member - they are looking kinda sus.
+      case Waiting.CurrentlyWaiting(waitingOnAck, lastPing) if tick - lastPing > cfg.pingPeriodTicks =>
+        Pure.warning(s"Ping period expired. Declaring $waitingOnAck as suspicious")
+          *> Pure.setSuspicious(waitingOnAck)
+          *> pingRandomMember
+
+      // Direct ping period passed and we have not received an ack for the pinged member - ping indirectly.
+      case Waiting.CurrentlyWaiting(waitingOn, lastPing) if tick - lastPing > cfg.directPingPeriodTicks =>
+        Pure.warning(s"Direct ping period expired for $waitingOn")
+          *> pingIndirectly(waitingOn)
+
+      // No period has expired
+      case _: Waiting.CurrentlyWaiting =>
+        ZPure.unit
+
+      // We just started up, as there is no previous ping. Ping immediatelly
+      case Waiting.NeverWaited =>
+        pingRandomMember
+  yield ()
+
+def detectFailures: Pure[Unit] =
+  for
+    (_, tick, cfg) <- Pure.inputs
+    failed         <- Pure.modify(_.updateOverdueSuspicious(tick - cfg.suspectedPeriodTicks, tick))
+    _              <- ZPure.when(failed.nonEmpty)(Pure.warning(s"The following members have failed: $failed"))
+  yield ()
+
+def handleTimeouts: Pure[Unit] =
+  for
+    (st, tick, cfg) <- Pure.inputs
 
     _ <- st.joiningVia match
+      // We are not in the joining process anymore, we begin pinging after a ping period from our last join message
+      case _: Waiting.LastWaited => detectFailures *> sendPings
+
       // We are currently in the join process and the join timeout has been exceeded. Pick a different seed node
-      case Some(joiningVia) if st.tick + ticks > cfg.joinPeriodTicks =>
-        sendJoin(tryExclude = Some(joiningVia)) *> Pure.resetTicks
+      case Waiting.CurrentlyWaiting(joiningVia, attemptedAt) if tick - attemptedAt > cfg.joinPeriodTicks =>
+        sendJoin(tryExclude = Some(joiningVia))
 
       // We are currently in the join process and the join timeout has not been exceeded
-      case Some(_) =>
-        Pure.addTicks(ticks)
+      case _: Waiting.CurrentlyWaiting => ZPure.unit
 
-      // We are not in the joining process anymore, we begin pinging after a ping period from our last join message
-      case None =>
-        st.waitingOnAck match
-          // We are not waiting for any ack and a ping period passed. Ping another member.
-          case None if st.tick + ticks > cfg.pingPeriodTicks =>
-            pingRandomMember *> Pure.resetTicks
-
-          // Ping period passed and we have not received an ack for the pinged member. They have failed.
-          case Some(waitingOnAck) if st.tick + ticks > cfg.pingPeriodTicks =>
-            for
-              _ <- Pure.warning(s"Ping period expired. Declaring $waitingOnAck as failed")
-              _ <- Pure.setFailed(waitingOnAck)
-              _ <- pingRandomMember
-              _ <- Pure.resetTicks
-            yield ()
-
-          // Direct ping period passed and we have not received an ack for the pinged member. Ping indirectly.
-          case Some(waitingOnAck) if st.tick + ticks > cfg.directPingPeriodTicks =>
-            for
-              _ <- Pure.warning(s"Direct ping period expired for $waitingOnAck")
-              _ <- pingIndirectly(waitingOnAck)
-              _ <- Pure.addTicks(ticks)
-            yield ()
-
-          // No period has expired yet, keep waiting for the ack or not waiting for any ack
-          case _ => Pure.addTicks(ticks)
+      // We have just startup up, so we have never attempted to join
+      case Waiting.NeverWaited => sendJoin()
   yield ()
+
+/** All the logic that runs in a single tick
+  */
+def singleIteration(
+  cfg:      SwimConfig,
+  ts:       Ticks,
+  st:       State,
+  rand:     PseudoRandom,
+  messages: Chunk[IncomingMessage]
+): (Chunk[Output], State, PseudoRandom) =
+  val program           = handleMessages(messages) *> handleTimeouts
+  val env               = zio.ZEnvironment(cfg, ts)
+  val (outs, res)       = program.provideEnvironment(env).runAll((st, rand))
+  val ((st1, rand1), _) = res.right.get
+  (outs, st1, rand1)

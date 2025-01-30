@@ -12,9 +12,14 @@ object Ticks:
   def zero: Ticks = 0
 
   extension (t: Ticks)
-    inline infix def +(t1: Ticks): Ticks   = t + t1
-    inline infix def >(t1: Ticks): Boolean = t > t1
-    inline infix def >(i: Int): Boolean = t > i
+    inline infix def +(t1:  Ticks): Ticks   = t + t1
+    inline infix def -(t1:  Ticks): Ticks   = t - t1
+    inline infix def -(i:   Int):   Ticks   = t - i
+    inline infix def >(t1:  Ticks): Boolean = t > t1
+    inline infix def <(t1:  Ticks): Boolean = t < t1
+    inline infix def <=(t1: Ticks): Boolean = t <= t1
+    inline infix def >(i:   Int):   Boolean = t > i
+    inline infix def <(i:   Int):   Boolean = t < i
     inline infix def ==(t1: Ticks): Boolean = t == t1
     inline infix def prev: Ticks = t - 1
 
@@ -35,11 +40,10 @@ object Ticks:
           val passedTicks: Long =
             Duration.fromInterval(before, now).toMillis / tickEvery
 
-          val alignedNow: OffsetDateTime  =
+          val alignedNow: OffsetDateTime =
             now.minus(now.toInstant().toEpochMilli() % tickEvery, ChronoUnit.MILLIS)
 
           val decision: Decision =
             Decision.Continue(Interval.after(alignedNow.plus(Duration.fromMillis(tickEvery))))
 
-
-          ZIO.succeed(Some(alignedNow), passedTicks, decision)
+          ZIO.succeed(Some(before), passedTicks, decision)

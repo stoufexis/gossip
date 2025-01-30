@@ -14,8 +14,9 @@ case class SwimConfig(
   directPingPeriodTicks:        Int,
   pingPeriodTicks:              Int,
   joinPeriodTicks:              Int,
+  suspectedPeriodTicks:         Int,
   failureDetectionSubgroupSize: Int,
-  disseminationLimit:           Int,
+  disseminationConstant:        Int,
   maxTransmissionUnit:          Int
 )
 
@@ -28,8 +29,9 @@ object SwimConfig:
     directPingPeriodTicks:        Int,
     pingPeriodTicks:              Int,
     joinPeriodTicks:              Int,
+    suspectedPeriodTicks:         Int,
     failureDetectionSubgroupSize: Int,
-    disseminationLimit:           Int,
+    disseminationConstant:        Int,
     maxTransmissionUnit:          Int
   ): SwimConfig =
     // convert addresses to remote, current, checking validity

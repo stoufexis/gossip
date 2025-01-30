@@ -18,7 +18,6 @@ sealed trait Address derives Encoder:
   def remote: Option[RemoteAddress] = this match
     case r: RemoteAddress => Some(r)
     case _ => None
-  
 
 object Address:
   /**
