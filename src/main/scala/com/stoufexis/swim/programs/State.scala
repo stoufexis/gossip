@@ -130,7 +130,43 @@ case class State(
   def disseminated(add: Set[Address]): State =
     add.foldLeft(this)((acc, address) => acc.disseminated(address))
 
+  def diff(that: State): State.Diff =
+    val woa: Option[(Waiting, Waiting)] =
+      Option.when(this.waitingOnAck == that.waitingOnAck)((this.waitingOnAck, that.waitingOnAck))
+
+    val jv: Option[(Waiting, Waiting)] =
+      Option.when(this.joiningVia == that.joiningVia)((this.joiningVia, that.joiningVia))
+
+    val cm: Set[(RemoteAddress, (Option[MemberInfo], Option[MemberInfo]))] =
+      (this.members.keySet ++ that.members.keySet).collect:
+        case addr if this.members.get(addr) != that.members.get(addr) =>
+          addr -> (this.members.get(addr), that.members.get(addr))
+
+    val ci: Option[(MemberInfo, MemberInfo)] =
+      Option.when(this.currentInfo == that.currentInfo)((this.currentInfo, that.currentInfo))
+
+    State.Diff(
+      waitingOnAck   = woa,
+      joiningVia     = jv,
+      changedMembers = Map.from(cm),
+      currentInfo    = ci
+    )
+
 object State:
+  case class Diff(
+    waitingOnAck:   Option[(Waiting, Waiting)],
+    joiningVia:     Option[(Waiting, Waiting)],
+    changedMembers: Map[RemoteAddress, (Option[MemberInfo], Option[MemberInfo])],
+    currentInfo:    Option[(MemberInfo, MemberInfo)]
+  ):
+    def print: String =
+      waitingOnAck.fold("")((w1, w2) => s"waiting_on_ack: $w1 -> $w2")
+        ++ joiningVia.fold("")((j1, j2) => s", join_via: $j1 -> $j2")
+        ++ changedMembers.foldLeft("") { case (str, (addr, (before, after))) =>
+          str ++ s", member_changed($addr): $before -> $after"
+        }
+        ++ currentInfo.fold("")((w1, w2) => s", current_info: $w1 -> $w2")
+
   /** Checks if the first status/incarnation pair overrides the second
     */
   def overrides(status1: MemberStatus, incarnation1: Int, status2: MemberStatus, incarnation2: Int): Boolean =

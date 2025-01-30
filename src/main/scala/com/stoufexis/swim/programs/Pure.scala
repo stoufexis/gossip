@@ -20,11 +20,9 @@ import com.stoufexis.swim.util.*
 type Pure[A] = ZPure[Output, (State, PseudoRandom), (State, PseudoRandom), SwimConfig & Ticks, Nothing, A]
 
 object Pure:
-  enum Level:
-    case Info, Warn, Debug
-
   enum Output:
-    case Log(referrs: Option[IncomingMessage], level: Level, msg: String)
+    case Warn(referrsTo: Seq[RemoteAddress], message: String)
+    case Info(referrsTo: Seq[RemoteAddress], message: String)
     case Message(typ: MessageType, target: RemoteAddress, bytes: Chunk[Byte])
 
   def update(f: State => State): Pure[Unit] =
@@ -89,23 +87,11 @@ object Pure:
   def ticks: Pure[Ticks] =
     ZPure.service[(State, PseudoRandom), Ticks]
 
-  def warning(msg: String): Pure[Unit] =
-    ZPure.log(Output.Log(None, Level.Warn, msg))
+  def warning(referrsTo: Seq[RemoteAddress] = Seq(), msg: String): Pure[Unit] =
+    ZPure.log(Output.Warn(referrsTo, msg))
 
-  def warning(referrs: IncomingMessage, msg: String): Pure[Unit] =
-    ZPure.log(Output.Log(Some(referrs), Level.Warn, msg))
-
-  def info(referrs: IncomingMessage, msg: String): Pure[Unit] =
-    info(Some(referrs), msg)
-
-  def info(msg: String): Pure[Unit] =
-    info(None, msg)
-
-  def info(referrs: Option[IncomingMessage], msg: String): Pure[Unit] =
-    ZPure.log(Output.Log(referrs, Level.Info, msg))
-
-  def debug(referrs: IncomingMessage, msg: String): Pure[Unit] =
-    ZPure.log(Output.Log(Some(referrs), Level.Debug, msg))
+  def info(referrsTo: Seq[RemoteAddress] = Seq(), msg: String): Pure[Unit] =
+    ZPure.log(Output.Info(referrsTo, msg))
 
   def randomElem[A](nes: NonEmptySet[A]): Pure[A] =
     ZPure.modify: (state, random) =>

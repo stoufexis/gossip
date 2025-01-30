@@ -1,7 +1,8 @@
 package com.stoufexis.swim
 
-import zio.*
+import zio.logging.*
 import zio.stream.*
+import zio.{LogAnnotation as _, *}
 
 import com.stoufexis.swim.comms.*
 import com.stoufexis.swim.model.*
@@ -23,7 +24,14 @@ object Swim:
       swim  <- init(cfg, chan, scope)
     yield swim
 
+  object Annotations:
+    val emitter:     LogAnnotation[Address]             = ???
+    val messageType: LogAnnotation[Option[MessageType]] = ???
+    val referrsTo:   LogAnnotation[Seq[Address]]        = ???
+
   def init(cfg: SwimConfig, chan: Channel, scope: Scope): UIO[Swim] =
+    val emitter = Annotations.emitter(cfg.address)
+
     // lambda in a val instead of def taking bytes as a param since applying
     // the address is somewhat expensive and we want it to happen only once
     val decodeAll: Chunk[Byte] => Either[String, Chunk[IncomingMessage]] =
@@ -35,44 +43,40 @@ object Swim:
           case Left(err)   => ZIO.logError(s"Could not decode batch of messages because: $err") as Chunk()
           case Right(msgs) => ZIO.succeed(msgs)
 
-    def log(level: Level, msg: => String, annotations: Map[String, String]): UIO[Unit] =
-      ZIO.logAnnotate(annotations.toSet.map(LogAnnotation(_, _))):
-        level match
-          case Level.Info  => ZIO.logInfo(msg)
-          case Level.Warn  => ZIO.logWarning(msg)
-          case Level.Debug => ZIO.logDebug(msg)
+    def log(
+      level:       LogLevel,
+      referrsTo:   Seq[RemoteAddress]  = Seq(),
+      messageType: Option[MessageType] = None,
+      message:     => String
+    ): UIO[Unit] =
+      ZIO.logLevel(level)(ZIO.log(message))
+        @@ emitter
+        @@ Annotations.referrsTo(referrsTo)
+        @@ Annotations.messageType(messageType)
 
     def handleOutput(messages: Chunk[Output]): Task[Unit] =
       ZIO.foreachDiscard(messages):
-        case Output.Log(Some(referrs), level, msg) =>
-          val annotations = Map(
-            "type" -> "RECEIVE",
-            "message_type" -> referrs.typ.toString,
-            "from" -> referrs.from.host,
-            "to" -> referrs.to.host
-          )
-          log(level, msg, annotations)
+        case Output.Warn(referrsTo, msg) =>
+          log(LogLevel.Warning, referrsTo, None, msg)
 
-        case Output.Log(None, level, msg) =>
-          log(level, msg, Map("type" -> "GENERAL"))
+        case Output.Info(referrsTo, msg) =>
+          log(LogLevel.Info, referrsTo, None, msg)
 
         case Output.Message(mt, target, bytes) =>
-          val annotations = Map(
-            "type" -> "SEND",
-            "message_type" -> mt.toString,
-            "to" -> target.host
-          )
-          log(Level.Debug, "Sending message", annotations) *> chan.send(target, bytes)
+          log(LogLevel.Debug, Seq(target), Some(mt), "Sending message") *> chan.send(target, bytes)
 
     def pipeline(
-      ref:  SignallingRef[Map[Address, MemberStatus]],
-      st:   State,
-      rand: PseudoRandom,
-      ts:   Ticks
+      ref:   SignallingRef[Map[Address, MemberStatus]],
+      state: State,
+      rand:  PseudoRandom,
+      ticks: Ticks
     ): Task[(State, PseudoRandom)] =
       for
-        _ <- ZIO.logDebug("Tick")
-        _ <- ZIO.whenDiscard(ts.prev != Ticks.zero)(ZIO.logWarning(s"Missed ${ts.prev} ticks"))
+        _ <-
+          log(LogLevel.Debug, message = "Tick")
+
+        _ <-
+          ZIO.when(ticks.prev != Ticks.zero)(log(LogLevel.Warning, message = s"Missed ${ticks.prev} ticks"))
 
         messages: Chunk[IncomingMessage] <-
           receiveMessages
@@ -81,10 +85,11 @@ object Swim:
           handleMessages(messages) *> handleTimeouts
 
         (output: Chunk[Output], newState: State, newRand: PseudoRandom) =
-          singleIteration(cfg, ts, st, rand, messages)
+          singleIteration(cfg, ticks, state, rand, messages)
 
         _ <- ref.set(newState.members.map((add, st) => (add, st._1)))
         _ <- handleOutput(output)
+        _ <- log(LogLevel.Debug, message = s"State Diff: ${state.diff(newState).print}")
       yield (newState, newRand)
 
     val initState = State(

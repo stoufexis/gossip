@@ -19,6 +19,8 @@ sealed trait Address derives Encoder:
     case r: RemoteAddress => Some(r)
     case _ => None
 
+  def print: String = s"$host:$port"
+
 object Address:
   /**
     * Requires evidence of the current address
