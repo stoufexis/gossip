@@ -175,7 +175,7 @@ def detectFailures: Pure[Unit] =
   for
     (_, tick, cfg) <- Pure.inputs
     failed         <- Pure.modify(_.updateOverdueSuspicious(tick - cfg.suspectedPeriodTicks, tick))
-    _ <- ZPure.when(failed.nonEmpty)(Pure.warning(failed.toSeq,"Found failed members"))
+    _              <- ZPure.when(failed.nonEmpty)(Pure.warning(failed.toSeq, "Found failed members"))
   yield ()
 
 def handleTimeouts: Pure[Unit] =

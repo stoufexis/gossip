@@ -49,7 +49,7 @@ object Serde:
       // Given the current address, we can produce a decoder for any address
       given add: Decoder[Address] = Decoder.pair[String, Int].map(Address(currentAddress, _, _))
       // Given a decoder for address, we can derive a decoder for meta and payload
-      given Decoder[Meta]    = Decoder.derived
+      given Decoder[Meta]   = Decoder.derived
       given Decoder[Update] = Decoder.derived
       Decoder.pair
 

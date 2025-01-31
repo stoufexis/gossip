@@ -9,6 +9,7 @@ trait Codec[A] extends Encoder[A] with Decoder[A]
 object Codec:
   def apply[A](encoder: Encoder[A], decoder: Decoder[A]): Codec[A] = new:
     def decode(bytes: Chunk[Byte]): Option[(Chunk[Byte], A)] = decoder.decode(bytes)
+
     def encode(a: A): Chunk[Byte] = encoder.encode(a)
 
   def encode[A: Encoder](a: A): Chunk[Byte] =

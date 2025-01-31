@@ -6,5 +6,5 @@ object NonEmptyVector:
   inline def apply[A](set: Vector[A]): Option[NonEmptyVector[A]] =
     if set.isEmpty then None else Some(set)
 
-  extension [A] (v: NonEmptyVector[A])
+  extension [A](v: NonEmptyVector[A])
     def safeHead: A = v.head

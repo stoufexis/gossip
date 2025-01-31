@@ -10,6 +10,7 @@ object NonEmptySet:
 
   extension [A](s: NonEmptySet[A])
     def safeHead: A = s.head
+
     def toNonEmptyVector: NonEmptyVector[A] = NonEmptyVector(s.toVector).get
 
     def randomElems(cnt: Int): UIO[Iterable[A]] =

@@ -22,8 +22,7 @@ sealed trait Address derives Encoder:
   def print: String = s"$host:$port"
 
 object Address:
-  /**
-    * Requires evidence of the current address
+  /** Requires evidence of the current address
     */
   def apply(currentAddress: CurrentAddress, host: String, port: Int): Address =
     if currentAddress.host == host && currentAddress.port == port

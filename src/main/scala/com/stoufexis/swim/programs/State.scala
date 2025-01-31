@@ -30,8 +30,8 @@ case class State(
 
   def clearJoining: State =
     joiningVia match
-      case Process.Uninitialized                => this
-      case Process.Completed(_)              => this
+      case Process.Uninitialized        => this
+      case Process.Completed(_)         => this
       case Process.InProgress(_, since) => copy(joiningVia = Process.Completed(since))
 
   def setWaitingOnAck(waitingOn: RemoteAddress, at: Ticks): State =
@@ -39,8 +39,8 @@ case class State(
 
   def clearWaitingOnAck: State =
     waitingOnAck match
-      case Process.Uninitialized                => this
-      case Process.Completed(_)              => this
+      case Process.Uninitialized        => this
+      case Process.Completed(_)         => this
       case Process.InProgress(_, since) => copy(waitingOnAck = Process.Completed(since))
 
   def setSuspicious(addr: RemoteAddress, now: Ticks): State =
