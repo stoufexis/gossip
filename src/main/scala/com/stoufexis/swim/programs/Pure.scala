@@ -87,8 +87,14 @@ object Pure:
   def ticks: Pure[Ticks] =
     ZPure.service[(State, PseudoRandom), Ticks]
 
+  def warning(referrsTo: RemoteAddress, msg: String): Pure[Unit] =
+    warning(Seq(referrsTo), msg)
+
   def warning(referrsTo: Seq[RemoteAddress] = Seq(), msg: String): Pure[Unit] =
     ZPure.log(Output.Warn(referrsTo, msg))
+
+  def info(referrsTo: RemoteAddress, msg: String): Pure[Unit] =
+    info(Seq(referrsTo), msg)
 
   def info(referrsTo: Seq[RemoteAddress] = Seq(), msg: String): Pure[Unit] =
     ZPure.log(Output.Info(referrsTo, msg))

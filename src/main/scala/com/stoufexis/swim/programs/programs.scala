@@ -23,13 +23,16 @@ def sendMessage(to: Iterable[RemoteAddress], message: OutgoingMessage): Pure[Uni
     _                 <- Pure.disseminated(included)
   yield ()
 
+def sendMessage(to: RemoteAddress, message: OutgoingMessage): Pure[Unit] =
+  sendMessage(List(to), message)
+
 /** Note that when receiving a message that requires redirection a warning is logged, as it could indicate
   * partial system or networking failures.
   */
 def handleMessages(messages: Chunk[IncomingMessage]): Pure[Unit] =
   def loop(msg: IncomingMessage): Pure[Unit] = Pure.get.flatMap: st =>
     if !st.isOperational(msg.from) then
-      Pure.warning(Seq(msg.from), "Dropping message as it is from a non-operational member")
+      Pure.warning(msg.from, "Dropping message as it is from a non-operational member")
     else
       st.joiningVia match
         // Behavior when we are in the join process
@@ -37,7 +40,7 @@ def handleMessages(messages: Chunk[IncomingMessage]): Pure[Unit] =
           // The only message we respond to is an expected joinAck directed at us
           msg match
             case TerminatingMessage(JoinAck, from, _, pl) if joiningVia == from =>
-              Pure.info(Seq(msg.from), "Node confirmed out join")
+              Pure.info(msg.from, "Node confirmed out join")
                 *> Pure.clearJoining
                 *> Pure.append(pl)
 
@@ -63,9 +66,9 @@ def handleMessages(messages: Chunk[IncomingMessage]): Pure[Unit] =
             case TerminatingMessage(Ping, from, _, pl) =>
               for
                 cfg     <- Pure.config
-                _       <- Pure.info(Seq(from), "Acking ping")
+                _       <- Pure.info(from, "Acking ping")
                 updates <- Pure.appendAndGet(pl)
-                _       <- sendMessage(List(from), InitiatingMessage(Ack, cfg.address, from, updates))
+                _       <- sendMessage(from, InitiatingMessage(Ack, cfg.address, from, updates))
               yield ()
 
             case TerminatingMessage(Ack, from, _, pl) if st.waitingOnAck.currentlyWaitingFor(from) =>
@@ -81,14 +84,14 @@ def handleMessages(messages: Chunk[IncomingMessage]): Pure[Unit] =
               for
                 cfg <- Pure.config
                 us  <- Pure.updates
-                _   <- Pure.info(Seq(from), "Node is joining the cluster")
+                _   <- Pure.info(from, "Node is joining the cluster")
                 _   <- ZPure.when(pl.nonEmpty)(Pure.warning(Seq(from), "Dropping Join payload"))
-                _   <- sendMessage(List(from), InitiatingMessage(JoinAck, cfg.address, from, us))
+                _   <- sendMessage(from, InitiatingMessage(JoinAck, cfg.address, from, us))
               yield ()
 
             // This message is likely old, so we dont accept its payload to guard against stale information
             case TerminatingMessage(JoinAck, from, _, _) =>
-              Pure.warning(Seq(from), "Received unexpected join ack")
+              Pure.warning(from, "Received unexpected join ack")
 
   ZPure.foreachDiscard(messages)(loop)
 
@@ -100,26 +103,31 @@ def pingRandomMember: Pure[Unit] =
         target <- Pure.randomElem(addresses)
         us     <- Pure.updates
         _      <- Pure.setWaitingOnAck(target)
-        _      <- sendMessage(List(target), InitiatingMessage(Ping, cfg.address, target, us))
+        _      <- sendMessage(target, InitiatingMessage(Ping, cfg.address, target, us))
       yield ()
 
     case None =>
       Pure.info(msg = "No-one to ping") *> Pure.clearWaitingOnAck
 
 def pingIndirectly(target: RemoteAddress): Pure[Unit] =
-  Pure.getOperationalWithout(target).map(NonEmptySet(_)).flatMap:
-    case Some(s) =>
-      for
-        cfg     <- Pure.config
-        us      <- Pure.updates
-        targets <- Pure.randomElems(s, cfg.failureDetectionSubgroupSize)
-        _       <- Pure.warning(target :: List.from(targets), s"Pinging $target indirectly through $targets")
-        _       <- sendMessage(targets, InitiatingMessage(Ping, cfg.address, target, us))
-      yield ()
+  for
+    cfg       <- Pure.config
+    us        <- Pure.updates
+    targetSet <- Pure.getOperationalWithout(target).map(NonEmptySet(_))
 
-    // TODO: Re-ping target directly when there are no indirect targets available
-    case None =>
-      Pure.warning(Seq(target), "No indirect targets for member")
+    _ <- targetSet match
+      case Some(set) =>
+        for
+          indirect <- Pure.randomElems(set, cfg.failureDetectionSubgroupSize)
+          _ <- Pure.warning(target :: List.from(indirect), s"Pinging $target indirectly through $indirect")
+          _ <- sendMessage(indirect, InitiatingMessage(Ping, cfg.address, target, us))
+        yield ()
+
+      // No indirect targets found. As a last resord re-ping target directly.
+      case None =>
+        Pure.warning(target, "No indirect targets for member")
+          *> sendMessage(target, InitiatingMessage(Ping, cfg.address, target, us))
+  yield ()
 
 /** Send a join to one of the provided seed nodes, excluding the given tryExclude node. If after excluding
   * `tryExclude` the seedNodes are empty, the `tryExclude` address is contacted instead.
@@ -132,7 +140,7 @@ def sendJoin(tryExclude: Option[RemoteAddress] = None): Pure[Unit] =
       case Some(e) => NonEmptySet(cfg.seedNodes - e).fold(ZPure.succeed(e))(Pure.randomElem)
       case None    => Pure.randomElem(cfg.seedNodes)
 
-    _ <- Pure.info(Seq(target), "Joining through existing member")
+    _ <- Pure.info(target, "Joining through existing member")
     // There is no payload, so the bound does not apply
     _ <- sendMessageUnbounded(target, InitiatingMessage(Join, cfg.address, target, Chunk()))
     _ <- Pure.setJoining(target)
@@ -153,13 +161,13 @@ def sendPings: Pure[Unit] =
 
       // Ping period passed and we have not received an ack from the pinged member - they are looking kinda sus.
       case Process.InProgress(waitingOn, lastPing) if tick - lastPing > cfg.pingPeriodTicks =>
-        Pure.warning(Seq(waitingOn), "Ping period expired. Marking member as suspicious")
+        Pure.warning(waitingOn, "Ping period expired. Marking member as suspicious")
           *> Pure.setSuspicious(waitingOn)
           *> pingRandomMember
 
       // Direct ping period passed and we have not received an ack for the pinged member - ping indirectly.
       case Process.InProgress(waitingOn, lastPing) if tick - lastPing > cfg.directPingPeriodTicks =>
-        Pure.warning(Seq(waitingOn), "Direct ping period expired for member")
+        Pure.warning(waitingOn, "Direct ping period expired for member")
           *> pingIndirectly(waitingOn)
 
       // No period has expired
