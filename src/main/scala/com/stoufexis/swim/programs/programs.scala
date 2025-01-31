@@ -33,7 +33,7 @@ def handleMessages(messages: Chunk[IncomingMessage]): Pure[Unit] =
     else
       st.joiningVia match
         // Behavior when we are in the join process
-        case Waiting.CurrentlyWaiting(joiningVia, _) =>
+        case Process.InProgress(joiningVia, _) =>
           // The only message we respond to is an expected joinAck directed at us
           msg match
             case TerminatingMessage(JoinAck, from, _, pl) if joiningVia == from =>
@@ -144,30 +144,30 @@ def sendPings: Pure[Unit] =
 
     _ <- st.waitingOnAck match
       // We are not waiting for any ack and a ping period passed. Ping another member.
-      case Waiting.LastWaited(lastPing) if tick - lastPing > cfg.pingPeriodTicks =>
+      case Process.Completed(lastPing) if tick - lastPing > cfg.pingPeriodTicks =>
         pingRandomMember
 
       // Its not yet time to ping again
-      case Waiting.LastWaited(_) =>
+      case Process.Completed(_) =>
         ZPure.unit
 
       // Ping period passed and we have not received an ack from the pinged member - they are looking kinda sus.
-      case Waiting.CurrentlyWaiting(waitingOn, lastPing) if tick - lastPing > cfg.pingPeriodTicks =>
+      case Process.InProgress(waitingOn, lastPing) if tick - lastPing > cfg.pingPeriodTicks =>
         Pure.warning(Seq(waitingOn), "Ping period expired. Marking member as suspicious")
           *> Pure.setSuspicious(waitingOn)
           *> pingRandomMember
 
       // Direct ping period passed and we have not received an ack for the pinged member - ping indirectly.
-      case Waiting.CurrentlyWaiting(waitingOn, lastPing) if tick - lastPing > cfg.directPingPeriodTicks =>
+      case Process.InProgress(waitingOn, lastPing) if tick - lastPing > cfg.directPingPeriodTicks =>
         Pure.warning(Seq(waitingOn), "Direct ping period expired for member")
           *> pingIndirectly(waitingOn)
 
       // No period has expired
-      case _: Waiting.CurrentlyWaiting =>
+      case _: Process.InProgress =>
         ZPure.unit
 
       // We just started up, as there is no previous ping. Ping immediatelly
-      case Waiting.NeverWaited =>
+      case Process.Uninitialized =>
         pingRandomMember
   yield ()
 
@@ -184,17 +184,17 @@ def handleTimeouts: Pure[Unit] =
 
     _ <- st.joiningVia match
       // We are not in the joining process anymore, we begin pinging after a ping period from our last join message
-      case _: Waiting.LastWaited => detectFailures *> sendPings
+      case _: Process.Completed => detectFailures *> sendPings
 
       // We are currently in the join process and the join timeout has been exceeded. Pick a different seed node
-      case Waiting.CurrentlyWaiting(joiningVia, attemptedAt) if tick - attemptedAt > cfg.joinPeriodTicks =>
+      case Process.InProgress(joiningVia, attemptedAt) if tick - attemptedAt > cfg.joinPeriodTicks =>
         sendJoin(tryExclude = Some(joiningVia))
 
       // We are currently in the join process and the join timeout has not been exceeded
-      case _: Waiting.CurrentlyWaiting => ZPure.unit
+      case _: Process.InProgress => ZPure.unit
 
       // We have just startup up, so we have never attempted to join
-      case Waiting.NeverWaited => sendJoin()
+      case Process.Uninitialized => sendJoin()
   yield ()
 
 /** All the logic that runs in a single tick

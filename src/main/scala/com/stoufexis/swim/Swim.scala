@@ -95,9 +95,9 @@ object Swim:
       yield (newState, newRand)
 
     val initState = State(
-      waitingOnAck = Waiting.NeverWaited,
+      waitingOnAck = Process.Uninitialized,
       members      = Map(),
-      joiningVia   = Waiting.NeverWaited,
+      joiningVia   = Process.Uninitialized,
       currentInfo  = MemberInfo(MemberStatus.Alive, 0, 0, Ticks.zero)
     )
 

@@ -14,8 +14,8 @@ import com.stoufexis.swim.tick.*
   *   An update about the current node that should be disseminated
   */
 case class State(
-  waitingOnAck: Waiting,
-  joiningVia:   Waiting,
+  waitingOnAck: Process,
+  joiningVia:   Process,
   members:      Map[RemoteAddress, MemberInfo],
   currentInfo:  MemberInfo
 ):
@@ -26,22 +26,22 @@ case class State(
     copy(members = members.updatedWith(member)(f))
 
   def setJoining(via: RemoteAddress, at: Ticks): State =
-    copy(joiningVia = Waiting.CurrentlyWaiting(via, at))
+    copy(joiningVia = Process.InProgress(via, at))
 
   def clearJoining: State =
     joiningVia match
-      case Waiting.NeverWaited                => this
-      case Waiting.LastWaited(_)              => this
-      case Waiting.CurrentlyWaiting(_, since) => copy(joiningVia = Waiting.LastWaited(since))
+      case Process.Uninitialized                => this
+      case Process.Completed(_)              => this
+      case Process.InProgress(_, since) => copy(joiningVia = Process.Completed(since))
 
   def setWaitingOnAck(waitingOn: RemoteAddress, at: Ticks): State =
-    copy(waitingOnAck = Waiting.CurrentlyWaiting(waitingOn, at))
+    copy(waitingOnAck = Process.InProgress(waitingOn, at))
 
   def clearWaitingOnAck: State =
     waitingOnAck match
-      case Waiting.NeverWaited                => this
-      case Waiting.LastWaited(_)              => this
-      case Waiting.CurrentlyWaiting(_, since) => copy(waitingOnAck = Waiting.LastWaited(since))
+      case Process.Uninitialized                => this
+      case Process.Completed(_)              => this
+      case Process.InProgress(_, since) => copy(waitingOnAck = Process.Completed(since))
 
   def setSuspicious(addr: RemoteAddress, now: Ticks): State =
     val newStatus = MemberStatus.Suspicious
@@ -131,10 +131,10 @@ case class State(
     add.foldLeft(this)((acc, address) => acc.disseminated(address))
 
   def diff(that: State): State.Diff =
-    val woa: Option[(Waiting, Waiting)] =
+    val woa: Option[(Process, Process)] =
       Option.when(this.waitingOnAck == that.waitingOnAck)((this.waitingOnAck, that.waitingOnAck))
 
-    val jv: Option[(Waiting, Waiting)] =
+    val jv: Option[(Process, Process)] =
       Option.when(this.joiningVia == that.joiningVia)((this.joiningVia, that.joiningVia))
 
     val cm: Set[(RemoteAddress, (Option[MemberInfo], Option[MemberInfo]))] =
@@ -154,8 +154,8 @@ case class State(
 
 object State:
   case class Diff(
-    waitingOnAck:   Option[(Waiting, Waiting)],
-    joiningVia:     Option[(Waiting, Waiting)],
+    waitingOnAck:   Option[(Process, Process)],
+    joiningVia:     Option[(Process, Process)],
     changedMembers: Map[RemoteAddress, (Option[MemberInfo], Option[MemberInfo])],
     currentInfo:    Option[(MemberInfo, MemberInfo)]
   ):
