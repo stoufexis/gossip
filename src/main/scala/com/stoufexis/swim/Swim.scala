@@ -40,8 +40,10 @@ object Swim:
     def receiveMessages: Task[Chunk[IncomingMessage]] =
       chan.receive.flatMap: bs =>
         decodeAll(bs) match
-          case Left(err)   => ZIO.logError(s"Could not decode batch of messages because: $err") as Chunk()
-          case Right(msgs) => ZIO.succeed(msgs)
+          case Left(err) =>
+            log(LogLevel.Error, message = s"Could not decode batch of messages because: $err") as Chunk()
+          case Right(msgs) =>
+            ZIO.succeed(msgs)
 
     def log(
       level:       LogLevel,
