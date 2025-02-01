@@ -52,9 +52,10 @@ object Pure:
     ticks.flatMap(now => update(_.append(chunk, now)))
 
   def appendAndGet(chunk: Chunk[Update]): Pure[Chunk[Update]] =
-    ZPure.modify: (st, r) =>
-      val (out, newSt) = st.appendAndGet(chunk)
-      (out, (newSt, r))
+    Pure.inputs.flatMap: (_, ticks, cfg) =>
+      ZPure.modify: (st, r) =>
+        val (out, newSt) = st.appendAndGet(cfg.address, chunk, ticks, cfg.disseminationConstant)
+        (out, (newSt, r))
 
   def peek[A](f: State => A): Pure[A] =
     ZPure.get.map((s, _) => f(s))

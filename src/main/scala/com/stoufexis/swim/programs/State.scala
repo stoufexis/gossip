@@ -19,11 +19,12 @@ case class State(
   members:      Map[RemoteAddress, MemberInfo],
   currentInfo:  MemberInfo
 ):
-  private def cutoff(disseminationConstant: Int): Int =
-    (disseminationConstant * Math.log10(members.size)).toInt
-
   private def updateMember(member: RemoteAddress)(f: Option[MemberInfo] => Option[MemberInfo]): State =
     copy(members = members.updatedWith(member)(f))
+
+  private def modifyMember[A](member: RemoteAddress)(f: Option[MemberInfo] => (A, Option[MemberInfo]))
+    : (A, State) =
+    ???
 
   def setJoining(via: RemoteAddress, at: Ticks): State =
     copy(joiningVia = Process.InProgress(via, at))
@@ -70,14 +71,64 @@ case class State(
         else
           acc
 
+  private def appendOne(update: Update, now: Ticks): (Boolean, State) =
+    update.address match
+      case address: RemoteAddress =>
+        modifyMember(address):
+          case current @ Some(MemberInfo(status, _, inc, _)) =>
+            if overrides(update.status, update.incarnation, status, inc) then
+              true -> Some(MemberInfo(update.status, 0, update.incarnation, now))
+            else
+              false -> current
+
+          case _ =>
+            true -> Some(MemberInfo(update.status, 0, update.incarnation, now))
+
+      case _: CurrentAddress =>
+        update.status match
+          case MemberStatus.Suspicious if currentInfo.incarnation == update.incarnation =>
+            true -> copy(currentInfo = MemberInfo(MemberStatus.Alive, 0, currentInfo.incarnation + 1, now))
+
+          case _ => false -> this
+
+  private def appendMany(updates: Chunk[Update], now: Ticks): (Set[Address], State) =
+    updates.foldLeft((Set.empty[Address], this)):
+      case ((updated, state), update) =>
+        val (wasUpdated, newState) = state.appendOne(update, now)
+        if wasUpdated
+        then (updated + update.address, newState)
+        else (updated, newState)
+
+  private def updatesExcluding(
+    exclude:               Set[Address],
+    currentAddress:        CurrentAddress,
+    disseminationConstant: Int
+  ): Chunk[Update] =
+    val cutoff = State.cutoff(disseminationConstant, members.size + 1)
+    // The memberlist should be relatively small (a few hundreads of elements at most usually)
+    // so we will accept this unoptimized series of operations for now.
+    Chunk
+      .from(members)
+      .appended(currentAddress, currentInfo)
+      .filterNot { (add, _) => exclude.contains(add) }
+      .sortBy { (_, info) => info.disseminatedCnt }
+      .takeWhile { (_, info) => info.disseminatedCnt <= cutoff }
+      .map { (add, info) => Update(add, info.status, info.incarnation) }
+
   /** Appends the given updates and returns a series of updates that should be disseminated to the node from
     * which the append updates originated.
     *
     * The returned updates are for nodes that were not included in the append updates. Sorted by asceding
     * dissemination count.
     */
-  def appendAndGet(append: Chunk[Update]): (Chunk[Update], State) =
-    ???
+  def appendAndGet(
+    currentAddress:        CurrentAddress,
+    updates:               Chunk[Update],
+    now:                   Ticks,
+    disseminationConstant: Int
+  ): (Chunk[Update], State) =
+    val (updated, newState) = appendMany(updates, now)
+    (newState.updatesExcluding(updated - currentAddress, currentAddress, disseminationConstant), newState)
 
   /** @return
     *   The latest member states per remote address. If an element has been disseminated λ*log(n) times, it is
@@ -85,37 +136,13 @@ case class State(
     *   disseminated fewer times are first.
     */
   def updates(currentAddress: CurrentAddress, disseminationConstant: Int): Chunk[Update] =
-    // The memberlist should be relatively small (a few hundreads of elements at most usually)
-    // so we will accept this unoptimized series of operations for now.
-    Chunk
-      .from(members)
-      .appended(currentAddress, currentInfo)
-      .sortBy { (_, info) => info.disseminatedCnt }
-      .takeWhile { (_, info) => info.disseminatedCnt <= cutoff(disseminationConstant) }
-      .map { (add, info) => Update(add, info.status, info.incarnation) }
+    updatesExcluding(Set.empty, currentAddress, disseminationConstant)
 
   def append(update: Update, now: Ticks): State =
-    update.address match
-      case address: RemoteAddress =>
-        updateMember(address):
-          case current @ Some(MemberInfo(status, _, inc, _)) =>
-            if overrides(update.status, update.incarnation, status, inc) then
-              Some(MemberInfo(update.status, 0, update.incarnation, now))
-            else
-              current
-
-          case _ =>
-            Some(MemberInfo(update.status, 0, update.incarnation, now))
-
-      case _: CurrentAddress =>
-        update.status match
-          case MemberStatus.Suspicious if currentInfo.incarnation == update.incarnation =>
-            copy(currentInfo = MemberInfo(MemberStatus.Alive, 0, currentInfo.incarnation + 1, now))
-
-          case _ => this
+    appendOne(update, now)._2
 
   def append(chunk: Chunk[Update], now: Ticks): State =
-    chunk.foldLeft(this)((acc, update) => acc.append(update, now))
+    appendMany(chunk, now)._2
 
   def disseminated(add: Address): State =
     add match
@@ -184,3 +211,6 @@ object State:
           case _                       => false
 
       case MemberStatus.Failed => true
+
+  def cutoff(disseminationConstant: Int, groupSize: Int): Int =
+    (disseminationConstant * Math.log10(groupSize)).toInt
