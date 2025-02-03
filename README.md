@@ -28,7 +28,7 @@ This implementation uses the notion of ticks instead of a local clock. The tick 
 
 ## Usage of ZPure
 
-The ZPure data type of zio-prelude is used heavily to purely model the logic of the internal SWIM state machine
+The [ZPure data type of zio-prelude](https://zio.dev/zio-prelude/zpure/) is used heavily to purely model the logic of the internal SWIM state machine
 
 # TODOs
 
