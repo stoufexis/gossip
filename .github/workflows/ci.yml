@@ -1,0 +1,36 @@
+name: Continuous Integration
+
+on:
+  push:
+
+jobs:
+  build:
+    name: Build and Check Formatting
+    strategy:
+      matrix:
+        os: [ubuntu-latest]
+        scala: [3.3.4]
+        java: [zulu@8]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout current branch (full)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Java (zulu@8)
+        if: matrix.java == 'zulu@8'
+        uses: actions/setup-java@v4
+        with:
+          distribution: zulu
+          java-version: 8
+          cache: sbt
+
+      - name: Setup sbt
+        uses: sbt/setup-sbt@v1
+
+      - name: Check formatting
+        run: sbt '++ ${{ matrix.scala }}' scalafmtCheckAll
+
+      - name: Compile project
+        run: sbt '++ ${{ matrix.scala }}' compile
