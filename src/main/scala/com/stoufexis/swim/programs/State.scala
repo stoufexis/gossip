@@ -24,7 +24,8 @@ case class State(
 
   private def modifyMember[A](member: RemoteAddress)(f: Option[MemberInfo] => (A, Option[MemberInfo]))
     : (A, State) =
-    ???
+    val (out, replacement) = f(members.get(member))
+    out -> updateMember(member)(_ => replacement)
 
   def setJoining(via: RemoteAddress, at: Ticks): State =
     copy(joiningVia = Process.InProgress(via, at))
