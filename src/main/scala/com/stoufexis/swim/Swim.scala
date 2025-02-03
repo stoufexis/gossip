@@ -13,14 +13,12 @@ import com.stoufexis.swim.tick.*
 import com.stoufexis.swim.util.*
 
 trait Swim:
-  /**
-    * Emits the current memberlist and then subsequent updates.
+  /** Emits the current memberlist and then subsequent updates.
     */
   def members: UStream[Map[Address, MemberStatus]]
 
 object Swim:
-  /**
-    * Initiates the swim runloop and returns a Swim object
+  /** Initiates the swim runloop and returns a Swim object
     */
   val layer: URLayer[SwimConfig & Channel & Scope, Swim] = ZLayer:
     for
