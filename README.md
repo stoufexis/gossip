@@ -35,3 +35,4 @@ The [ZPure data type of zio-prelude](https://zio.dev/zio-prelude/zpure/) is used
 * An anti-entropy mechanism is probably necessary to ensure quick convergence. Inspiration can be taken from [Serf's implementation](https://github.com/hashicorp/serf/blob/master/docs/internals/gossip.html.markdown#swim-modifications)
 * Currently, if a node is declared failed without crashing and restarting, it will be declared failed and will be ignored. In these cases the node needs to be forced to go through a new join process.
 * A thorough automated test suite should be put in place.
+* A final implementation for the Channel service should be provided.
